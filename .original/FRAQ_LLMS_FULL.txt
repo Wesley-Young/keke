@@ -1,0 +1,2667 @@
+# 快速开始 (/docs)
+
+
+
+
+
+欢迎来到 Fraq 的文档！Fraq 是一个 Milky 协议下的 TypeScript 聊天机器人框架。Milky 是基于 HTTP / WebSocket 通信的 QQ 机器人应用接口标准。你可以随时通过 [Milky 的官方网站](https://milky.ntqqrev.org/)来了解更多关于 Milky 的信息。
+
+## 安装 Fraq [#安装-fraq]
+
+可以通过任意的包管理器安装 Fraq：
+
+```bash
+npm install @fraqjs/fraq
+# or
+yarn add @fraqjs/fraq
+# or
+pnpm add @fraqjs/fraq
+```
+
+Fraq 需要在 Node.js 22+ 环境（或其他的支持 WebSocket API 的服务端 JS 环境）中运行。强烈建议使用 TypeScript 来编写 Fraq 代码，并使用 [tsx](https://www.npmjs.com/package/tsx) 来运行你的项目。
+
+## 阅读指南 [#阅读指南]
+
+根据需求的不同，我们准备了如下的文档供你参考：
+
+<Cards>
+  <Card icon="<SquareCodeIcon />" href="./docs/development/start" title="开发指南">
+    从简单的 Echo 机器人开始，逐步深入了解 Fraq 的各种功能和特性。
+  </Card>
+
+  <Card icon="<ServerIcon />" title="使用指南">
+    (Work In Progress) 了解如何安装和配置插件，进而搭建一个属于你的 Fraq 机器人。
+  </Card>
+</Cards>
+
+
+# 定义指令 (/docs/development/command)
+
+
+
+在一开始的例子中，我们已经见过了一个简单的指令定义：
+
+```typescript
+ctx.router.command({
+  name: 'echo',
+  pattern: {
+    content: param.str(),
+  },
+  execute(session, { content }) {
+    // ...
+  },
+});
+```
+
+这段代码包含了三个要素：指令叫什么、需要什么参数、以及收到这个指令时要执行什么操作。“快速开始” 一节已经对上述代码进行了简要的拆解，下面我们将更深入地介绍 Fraq 中的指令系统的设计与使用方法。
+
+## 认识参数类型 [#认识参数类型]
+
+Fraq 提供了多种参数类型来满足不同的需求：
+
+* `param.literal(literal)`: 匹配一个字面量参数，只有当输入与指定的字面量完全匹配时才会成功。
+* `param.str()`: 匹配一个字符串参数。
+* `param.num()`: 匹配一个数字参数。
+* `param.greedy()`: 匹配当前文本消息段中的剩余文本，不会跨过后续消息段。
+* `param.catchAll()`: 匹配所有剩余内容，捕获当前位置之后的所有文本和非文本消息段，并以消息段数组返回。这个参数必须放在最后。
+* `param.union(...literals)`: 匹配一个联合参数，输入必须与提供的字面量列表中的一个完全匹配。
+* `param.segment(type)`: 匹配一个给定类型的非文本消息段参数，例如 `mention` 或 `image`。这在解析一些富文本输入时非常有用，例如，一些指令可能会接受一张图片作为参数。
+
+我们用一个例子来完整地展示一下这些参数是如何使用的：
+
+```typescript
+ctx.router.command({
+  name: 'foo',
+  pattern: {
+    l: param.literal('hello'),
+    s: param.str(),
+    n: param.num(),
+    u: param.union('option1', 'option2', 'option3'),
+    seg: param.segment('mention'),
+    g: param.greedy(),
+    rest: param.catchAll(),
+  },
+  execute(session, { l, s, n, u, seg, g, rest }) {
+    // ...
+  },
+});
+```
+
+满足上述指令的一个用户输入可以是：
+
+<pre>
+  foo hello world 123 option2 <u>@someuser</u> this is a greedy parameter{' '}
+  <u>@anotheruser</u>
+</pre>
+
+它会被解析成：
+
+```json
+{
+  "l": "hello",
+  "s": "world",
+  "n": 123,
+  "u": "option2",
+  "seg": {
+    "type": "mention",
+    "data": { "user_id": 123456789, "name": "someuser" }
+  },
+  "g": "this is a greedy parameter ",
+  "rest": [
+    {
+      "type": "mention",
+      "data": { "user_id": 987654321, "name": "anotheruser" }
+    }
+  ]
+}
+```
+
+除此之外，还可以在定义完参数类型后使用 `describe` 方法来为参数添加描述信息，这些描述信息会在生成的帮助文档中显示，帮助用户更好地理解每个参数的作用和用法，例如：
+
+```typescript
+param.str().describe('要回显的文本内容');
+```
+
+## 指令组 [#指令组]
+
+我们经常会给一个指令定义多个子指令（Subcommand）。在 Fraq 中，可以使用 `ctx.router.group` 来创建一个指令组，它会返回一个新的 Router 对象，我们可以在其中定义子指令：
+
+```typescript
+ctx.router
+  .group('parent')
+  .command({
+    name: 'child1',
+    pattern: { arg1: param.str() },
+    execute(session, { arg1 }) {
+      // Handle child1 command
+    },
+  })
+  .command({
+    name: 'child2',
+    pattern: { arg2: param.num() },
+    execute(session, { arg2 }) {
+      // Handle child2 command
+    },
+  });
+```
+
+这样，我们就定义了一个名为 `parent` 的指令组，其中包含两个子指令 `child1` 和 `child2`。每个子指令都有自己的参数和处理函数。当用户输入 `parent child1 <arg1>` 时，`child1` 的处理函数将被调用；当用户输入 `parent child2 <arg2>` 时，`child2` 的处理函数将被调用。
+
+指令组可以嵌套：
+
+```typescript
+const parentGroup = ctx.router.group('parent');
+parentGroup
+  .command({
+    name: 'child1',
+    pattern: { arg1: param.str() },
+    execute(session, { arg1 }) {
+      // Handle child1 command
+    },
+  })
+  .command({
+    name: 'child2',
+    pattern: { arg2: param.num() },
+    execute(session, { arg2 }) {
+      // Handle child2 command
+    },
+  });
+
+const subGroup = parentGroup.group('sub');
+subGroup.command({
+  name: 'child3',
+  pattern: { arg3: param.greedy() },
+  execute(session, { arg3 }) {
+    // Handle child3 command
+  },
+});
+```
+
+这个 router 可以接受以下的输入：
+
+* `parent child1 <arg1>` - 调用 `child1` 的处理函数
+* `parent child2 <arg2>` - 调用 `child2` 的处理函数
+* `parent sub child3 <arg3>` - 调用 `child3` 的处理函数
+
+## 模式匹配 [#模式匹配]
+
+`ctx.router` 提供了一个名为 `rawPattern` 的方法，它允许我们直接使用一个参数模式对象从头开始匹配用户输入，而不是定义指令名称和参数类型，通过检测用户输入是否符合这个模式来决定是否调用对应的处理函数。例如，如果我们需要用户先引用（回复）一条消息，再输入指令，我们可以定义如下的 Raw Pattern：
+
+```typescript
+ctx.router.rawPattern({
+  pattern: {
+    reply: param.segment('reply'),
+    content: param.greedy(),
+  },
+  execute(session, { reply, content }) {
+    // ...
+  },
+});
+```
+
+这样就可以通过 `reply` 来拿到用户引用的消息段信息，通过 `content` 来拿到用户输入的剩余文本信息了。这比一般的指令定义更灵活，因为它不要求用户输入一个特定的指令名称，只要输入符合模式就可以了。
+
+如果需要捕获完整的剩余消息内容，包括文本、提及、图片等消息段，可以使用 `param.catchAll()`：
+
+```typescript
+ctx.router.rawPattern({
+  pattern: {
+    content: param.catchAll(),
+  },
+  execute(session, { content }) {
+    // content: milky.IncomingSegment[]
+  },
+});
+```
+
+`param.catchAll()` 会消费当前位置之后的所有剩余内容，因此它只能作为一个模式中的最后一个参数注册。
+
+## 指令重载 [#指令重载]
+
+模式匹配还可以用于指令重载。在上面的例子中，我们一直都假设每个指令都只有一种参数模式，但实际上有时候我们可能希望一个指令能够接受多种不同的参数模式。例如，我们可能希望 `echo` 指令既能接受一个字符串参数，也能接受一个图片消息段参数；一个更典型的例子是游戏《Minecraft》中的 `tp` 指令，它既可以接受玩家名称作为参数，也可以接受坐标作为参数，例如：
+
+```
+tp 1 2 3            // 将玩家传送到坐标 (1, 2, 3)
+tp Steve 1 2 3      // 将玩家 Steve 传送到坐标 (1, 2, 3)
+tp Steve Alex       // 将玩家 Steve 传送到玩家 Alex 的位置
+```
+
+为了匹配上述不同的参数模式，我们可以创建一个名为 `tp` 的指令组，并在其中用 `rawPattern` 方法来定义不同的参数模式：
+
+```typescript
+ctx.router
+  .group('tp')
+  .rawPattern({
+    pattern: {
+      x: param.num(),
+      y: param.num(),
+      z: param.num(),
+    },
+    execute(session, { x, y, z }) {
+      // Handle tp with coordinates only
+    },
+  })
+  .rawPattern({
+    pattern: {
+      player: param.str(),
+      x: param.num(),
+      y: param.num(),
+      z: param.num(),
+    },
+    execute(session, { player, x, y, z }) {
+      // Handle tp with player and coordinates
+    },
+  })
+  .rawPattern({
+    pattern: {
+      player1: param.str(),
+      player2: param.str(),
+    },
+    execute(session, { player1, player2 }) {
+      // Handle tp with player to player
+    },
+  });
+```
+
+{/* prettier-ignore */}
+
+<Callout type="warning">
+  定义指令重载时需要格外小心，确保不同的参数模式之间没有歧义，否则可能会导致某些输入无法正确匹配到对应的处理函数。下面是一个引起歧义的案例：
+
+  ```typescript
+  ctx.router
+    .group('test')
+    .rawPattern({
+      pattern: { arg: param.str() },
+      execute(session, { arg }) {
+        // Handle test with string argument
+      },
+    })
+    .rawPattern({
+      pattern: { arg: param.num() },
+      execute(session, { arg }) {
+        // Handle test with number argument
+      },
+    });
+  ```
+
+  在上面的例子中，如果用户输入 `test 123`，这个输入既符合第一个模式（因为数字也可以被解析为字符串），又符合第二个模式（因为它是一个数字）；但匹配字符串的模式先定义，所以它会被优先匹配到，导致数字参数的处理函数永远无法被调用。
+
+  关于命令匹配的具体规则，请参考[”深入了解“中的介绍](./digging/router.mdx#路由规则)。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+## `Session` 对象 [#session-对象]
+
+`Session` 对象代表了一个会话。它包含以下字段：
+
+* `raw`：触发该指令的原始 Milky 消息对象，包含来源、发送者、消息段等信息。
+* `reply`：一个函数，用于回复消息。它接受一个消息段数组作为参数，并将其发送回原会话。
+
+## 定义过滤器 [#定义过滤器]
+
+有时候我们可能希望某些指令只在特定条件下被触发，例如只有管理员才能使用某个指令。我们可以使用 `ctx.router.filter`，它会返回一个新的 Router 实例，只有满足过滤条件的输入才能触发该实例下定义的指令：
+
+```typescript
+const adminRouter = ctx.router.filter(
+  (session) =>
+    session.raw.message_scene === 'group' &&
+    session.raw.group_member.role !== 'member',
+);
+
+adminRouter.command({
+  name: 'admincmd',
+  pattern: { arg: param.str() },
+  execute(session, { arg }) {
+    // This command can only be triggered by group owner and administrators
+  },
+});
+```
+
+在上面的例子中，我们创建了一个新的 Router 实例 `adminRouter`，它只会在用户是群主或管理员时触发指令。我们在 `adminRouter` 上定义了一个指令 `admincmd`，只有满足过滤条件的输入才能触发这个指令。
+
+{/* prettier-ignore */}
+
+<Callout>
+  对于插件开发者，非必要情况下不应该主动调用 `ctx.router.filter` 来控制指令的触发权限，因为这会导致指令的可见性和触发条件不能被插件部署方所预期。更好的做法是将过滤指令的任务交给插件部署方，由插件部署方使用 [`ctx.fork`](./digging/context.mdx#事件过滤) 来创建新的 `Context` 实例，并在新的实例上安装插件来实现指令的权限控制。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+
+# 日志系统 (/docs/development/logging)
+
+
+
+在编写机器人时，日志通常是最早会用到、也最容易被忽略的功能之一。我们可能希望知道某个插件是否已经成功加载、某个指令为什么没有触发、或者在调用外部服务失败时记录下具体的错误信息。Fraq 在 `Context` 上提供了一个轻量的 `logger`，用来帮助你把这些信息统一地交给自己的日志系统处理。
+
+## `logger` 对象 [#logger-对象]
+
+`ctx.logger` 提供了四个常用的方法，分别对应不同的日志级别：
+
+```typescript
+ctx.logger.debug('Loaded local cache');
+ctx.logger.info('Bot is ready');
+ctx.logger.warn('Retrying request');
+ctx.logger.error('Failed to send message');
+```
+
+对于 `warn` 和 `error`，你还可以额外传入一个错误对象或其他需要保留的错误详情：
+
+```typescript
+try {
+  await doSomething();
+} catch (error) {
+  ctx.logger.error('Failed to do something', error);
+}
+```
+
+## 配置 `logHandler` [#配置-loghandler]
+
+默认情况下，Fraq 不会把日志直接输出到终端。你需要在创建 `Context` 时传入 `logHandler`，Fraq 会把所有日志消息交给这个函数：
+
+```typescript
+import { Context } from '@fraqjs/fraq';
+
+const ctx = Context.fromUrl('<替换成你的 Milky 协议端地址>', {
+  logHandler(message) {
+    console.log(`[${message.level}] [${message.module}] ${message.message}`);
+  },
+});
+
+ctx.logger.info('Bot is starting');
+
+ctx.start();
+```
+
+传给 `logHandler` 的日志消息是一个普通对象，包含这些字段：
+
+* `level`：日志级别，可能的值有 `debug`、`info`、`warn` 和 `error`。
+* `module`：日志来源的模块名称，默认为 `root`，但在插件里会自动设置为插件名称。
+* `message`：日志内容字符串。
+* `error`：可选字段，如果日志是由一个错误对象触发的，这里会包含这个错误对象。
+* `time`：日志生成的时间戳，通过 `Date.now()` 获取，单位是毫秒。
+
+在这个例子中，我们只是简单地把日志格式化之后输出到了终端。实际项目中，你也可以在 `logHandler` 里把日志发送到文件、数据库、监控系统，或者传递给你已经在使用的日志库来处理。
+
+### 使用 `color-log` [#使用-color-log]
+
+<NpmBadge packageName="@fraqjs/color-log" />
+
+Fraq 提供了一个官方的日志处理工具 `@fraqjs/color-log`，它可以让你的日志在终端输出时带上颜色，方便阅读和区分不同级别的日志。你可以使用包管理器安装它。
+
+然后在创建 `Context` 的时候使用它：
+
+```typescript
+import { createColoredLogHandler } from '@fraqjs/color-log';
+
+Context.create({
+  logHandler: createColoredLogHandler({
+    minLevel: 'info', // 只输出 info 及以上级别的日志
+  }),
+});
+```
+
+你也可以传入一些其他配置项，例如日期时间格式、不同等级的日志颜色等。值得一提的是，`@fraqjs/color-log` 使用 [chalk](https://www.npmjs.com/package/chalk) 来实现日志着色，因此在配置项中你可以直接使用 chalk 支持的颜色和样式。
+
+### 使用多个日志处理器 [#使用多个日志处理器]
+
+Fraq 提供了一个函数 `combineLogHandlers`，可以让你同时使用多个日志处理器：
+
+```typescript
+import { combineLogHandlers } from '@fraqjs/fraq';
+
+Context.create({
+  logHandler: combineLogHandlers(
+    createColoredLogHandler({ minLevel: 'info' }),
+    (message) => {
+      // 发送到远程服务器或者写入文件
+    },
+  ),
+});
+```
+
+## 在插件中使用日志 [#在插件中使用日志]
+
+插件中也可以直接使用 `ctx.logger`。插件在 `apply` 方法中拿到的 logger 会自动使用插件的 `name` 作为 `module`，这样多个插件的日志就可以自然地区分开：
+
+```typescript
+import { definePlugin } from '@fraqjs/fraq';
+
+export const EchoPlugin = definePlugin({
+  name: 'echo',
+  apply(ctx) {
+    ctx.logger.info('Echo plugin loaded');
+    ctx.router.command({
+      name: 'echo',
+      pattern: {
+        content: param.str(),
+      },
+      execute(session, { content }) {
+        ctx.logger.debug(`Received echo command: ${content}`);
+        session.reply(msg`You said: ${content}`);
+      },
+    });
+  },
+});
+```
+
+如果这个插件输出了一条日志，那么 `logHandler` 收到的 `module` 字段会是 `echo`，而不是默认的 `root`。这对于排查插件初始化顺序、依赖注入问题，或者区分不同功能模块的运行状态都很有帮助。
+
+
+# 构造消息 (/docs/development/message)
+
+
+
+
+
+消息（Message）是聊天平台中的重要概念。Milky 协议的消息分为**接收**和**发送**两大类，分别对应机器人从聊天平台接收到的消息和机器人向聊天平台发送的消息。
+
+每条消息由一个或多个**消息段**（Segment）组成，每个消息段包含一个类型标记和若干数据字段。消息段的类型标记决定了它的数据字段是什么样的，以及它在聊天平台上会被渲染成什么样子，典型的消息段如文本（text）消息段和图片（image）消息段。
+
+相关的接口定义可以参考 Milky 官网的以下页面：
+
+* [接收消息 (IncomingMessage)](https://milky.ntqqrev.org/struct/IncomingMessage)
+* [接收消息段 (IncomingSegment)](https://milky.ntqqrev.org/struct/IncomingSegment)
+* [发送消息段 (OutgoingSegment)](https://milky.ntqqrev.org/struct/OutgoingSegment)
+
+从上面的文档我们可以看到，接收的消息包含消息的场景（私聊或群聊）、会话 ID（用户 QQ 号或群号）以及发送者信息等，并且包含消息段的数组；而发送的消息由于是在客户端构造，只需要用一个消息段数组来表示。
+
+## `msg` 函数 [#msg-函数]
+
+从上一节的例子中，我们已经见过了这样一个发送消息段的例子：
+
+```typescript
+[
+  {
+    type: 'text',
+    data: {
+      text: `You said: ${content}`,
+    },
+  },
+];
+```
+
+有没有更简单一些的构造方式呢？答案是有的。Fraq 提供了一个 `msg` 函数来帮助我们更方便地构造消息段数组。我们首先从 Fraq 中引入 `msg` 函数，然后用它来构造上面的消息段数组：
+
+```typescript
+import { msg } from '@fraqjs/fraq';
+
+msg`You said: ${content}`;
+```
+
+那么既然能插入字符串 `content` 了，能不能插入别的消息段呢？你当然可以使用
+
+```typescript
+msg`This is an image: ${{ type: 'image', data: { uri: '...' } }}`;
+```
+
+来构造一条图文混排的消息，它会变成：
+
+```typescript
+[
+  { type: 'text', data: { text: 'This is an image: ' } },
+  { type: 'image', data: { uri: '...' } },
+];
+```
+
+不过上面的写法还是有些啰嗦了，Fraq 还提供了一些更简洁的方法来表示不同类型的消息段。
+
+{/* prettier-ignore */}
+
+<Accordions>
+  <Accordion title="为什么 msg 后面可以紧跟着一个字符串模板？">
+    这种略显少见的语法叫做**标签模板字符串**（Tagged Template Literal），它是 JavaScript 中的一种特殊的字符串语法。`msg` 函数会接收模板字符串中的文本和插值，并将它们转换成一个消息段数组。在这个例子中，`msg` 函数会将 `You said: ${content}` 转换成一个包含一个文本消息段的数组。
+
+    下面是 `msg` 的函数签名：
+
+    ```typescript
+    function msg(
+      strings: TemplateStringsArray,
+      ...values: (string | number | boolean | milky.OutgoingSegment_ZodInput)[]
+    ): milky.OutgoingSegment_ZodInput[];
+    ```
+
+    可以看出，在调用 `msg` 函数时，模板字符串中的文本会被传递给 `strings` 参数，而插值（如 `${content}`）会被传递给 `values` 参数。`msg` 函数会根据这些参数来构造一个消息段数组。
+
+    `msg` 除了接受 `string`、`number` 和 `boolean` 类型的插值外，还可以接受符合 `OutgoingSegment_ZodInput` 类型的对象。前面几种基本类型的插值会直接作为字符串拼接到文本消息段中，而 `OutgoingSegment_ZodInput` 类型的插值则会被直接作为一个消息段插入到结果数组中。当然，如果传入其他类型的插值，编译器会报错。
+
+    此外，`msg` 会自动删除整条消息首尾文本中的空白字符，因此你可以更放心地使用多行模板字符串来组织消息内容。这个处理只作用于消息边界，不会删除消息段之间用于排版的空格。
+
+    你可以访问 [Mozilla 的文档](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Template_literals)来了解更多关于标签模板字符串的信息。
+  </Accordion>
+</Accordions>
+
+{/* prettier-ignore-end */ }
+
+## `seg` 命名空间 [#seg-命名空间]
+
+`seg` 是 Fraq 中一个专门用来构造消息段的命名空间，它提供了很多方法来构造不同类型的消息段。从 Fraq 中引入 `seg` 后，可以使用下面的方法来构造消息段：
+
+```typescript
+import { seg } from '@fraqjs/fraq';
+
+// { type: 'mention', data: { user_id: 123456789 } }
+seg.mention(123456789);
+
+// { type: 'mention_all', data: {} }
+seg.mentionAll();
+
+// { type: 'face', data: { face_id: '14' } }
+seg.face(14);
+
+// { type: 'reply', data: { message_seq: 123 } }
+seg.reply(123);
+
+// { type: 'image', data: { uri: 'http://example.com/image.jpg' } }
+seg.image('http://example.com/image.jpg');
+
+// { type: 'record', data: { uri: 'http://example.com/audio.mp3' } }
+seg.record('http://example.com/audio.mp3');
+
+// { type: 'video', data: { uri: 'http://example.com/video.mp4' } }
+seg.video('http://example.com/video.mp4');
+```
+
+上面展示了 `seg` 命名空间中一些常用的方法来构造消息段。你也可以通过访问上面提到的 Milky 文档来了解所有可用的消息段，以及它们的数据字段是什么样的。使用 `seg` 命名空间可以让你的代码更加简洁和易读，同时也减少了构造消息段时可能出现的错误。
+
+
+# 进行 Mock 测试 (/docs/development/mocking)
+
+
+
+<NpmBadge packageName="@fraqjs/mock" />
+
+在编写机器人时，我们不一定总是拥有 / 愿意运行一个完整的 Milky 协议端来测试我们的代码，在这种情况下，创建一个模拟（Mock）客户端是非常有用的，而 `@fraqjs/mock` 包正提供了这样的功能，你可以使用包管理器安装它。
+
+## 初始化 Mock 环境 [#初始化-mock-环境]
+
+要创建一个 Mock 客户端，你可以使用 `createMockMilkyClient` 函数，然后你就可以像使用正常的 Milky 客户端一样使用它了：
+
+```typescript
+import { Context } from '@fraqjs/fraq';
+import { createMockMilkyClient } from '@fraqjs/mock';
+
+const client = createMockMilkyClient();
+const ctx = Context.fromClient(client);
+```
+
+`@fraqjs/mock` 还提供了一个 `createSimpleLogHandler` 函数用于创建一个直接打印到命令行、没有任何颜色样式的 `LogHandler`。你也可以使用其他的日志处理器（例如 [`@fraqjs/color-log`](./logging.mdx#使用-color-log) 提供的处理器）来打印日志，方便插件的调试。
+
+## 模拟消息事件 [#模拟消息事件]
+
+`MockMilkyClient` 提供了一些函数来模拟不同类型的消息事件：
+
+```typescript
+await client.receiveFriend({ userId: 10001 }, inmsg`ping`);
+await client.receiveGroup({ groupId: 20001, userId: 10001 }, inmsg`/deploy`);
+await client.receiveTemp({ userId: 10001, groupId: 20001 }, inmsg`hello`);
+```
+
+第一个参数包含了消息事件的相关信息，例如发送者的 QQ 号、所在的群号等，你也可以提供一些其他的信息来覆盖默认值，例如：
+
+```typescript
+await client.receiveFriend(
+  {
+    userId: 10001,
+    peerId: 10001,
+    senderId: 10001,
+    messageSeq: 7,
+    time: 123456,
+  },
+  inmsg`hello`,
+);
+```
+
+第二个参数是一个 `IncomingSegment[]`，你可以使用 `inmsg` 来方便地创建它。`inmsg` 同样支持字符串、数字、布尔值插值、`inseg` 插值、自动 `trim`，用法与之前提到的 [`msg`](./message.mdx#msg-函数) 与 [`seg`](./message.mdx#seg-命名空间) 一致；不同的地方在于 `inmsg` 和 `inseg` 生成的是 `IncomingSegment`。
+
+## 生成实体信息 [#生成实体信息]
+
+`@fraqjs/mock` 还提供了生成好友、群聊以及群成员信息的函数。这些函数将提供的 ID 作为 PCG32 的 `seed`，并且从内置的词库中选取片段来组合实体信息，因此生成的信息是**可复现**的。上面提到的模拟消息事件函数会自动调用这些生成函数来生成相关的实体信息，你可以直接调用它们来获取这些信息：
+
+```typescript
+createRandomFriend(10001);
+createRandomGroup(20001);
+createRandomGroupMember(20001, 10001);
+```
+
+你也可以提供一些覆盖默认值的选项：
+
+```typescript
+createRandomFriend(10001, { remark: 'Override' });
+createRandomGroup(20001, { group_name: 'Override' });
+```
+
+## 处理 API 调用 [#处理-api-调用]
+
+`MockMilkyClient` 本身不会对任何 API 调用返回有效的响应，只会返回 `undefined`。你可以使用 `stubApi` 方法来为某个 API 端点设置一个模拟的响应：
+
+```typescript
+client.stubApi('get_friend_info', (params) => ({
+  friend: {
+    user_id: params.user_id,
+    nickname: 'Override',
+    sex: 'unknown',
+    qid: 'qid_override',
+    remark: '',
+    category: {
+      category_id: 1,
+      category_name: 'General',
+    },
+  },
+}));
+```
+
+此后，当插件调用 `get_friend_info` API 时，就会得到我们设置的这个模拟响应。
+
+### 内置 API Stub [#内置-api-stub]
+
+在创建 `MockMilkyClient` 的时候，它会自动为一些常用的 API 端点设置默认的模拟响应。
+
+首先是一些与消息有关的 API：
+
+* `get_message`
+* `get_history_messages`
+* `mark_message_as_read`
+
+这些 API 的模拟响应会根据提供的信息从已经发送过的消息中生成，因此它们可以在不需要额外设置的情况下就能得到合理的响应。
+
+除此之外，还有一些与实体信息有关的 API：
+
+* `get_friend_info`
+* `get_group_info`
+* `get_group_member_info`
+
+这些 API 会先寻找之前调用的模拟消息事件中包含的实体信息，如果未发现匹配的实体信息，则会调用前面提到的生成实体信息的函数来生成一个新的实体信息作为响应。
+
+如果要覆盖这些 API 的默认模拟响应，你可以直接使用 `stubApi` 方法来设置一个新的模拟响应。你也可以调用 `clearApiStub` 和 `clearApiStubs` 方法来清除某个 API 端点或所有 API 端点的模拟响应。
+
+## 模拟其他事件 [#模拟其他事件]
+
+`MockMilkyClient` 还提供了一个 `emitEvent` 方法来模拟其他类型的事件，例如：
+
+```typescript
+client.emitEvent('group_join_request', {
+  group_id: 20001,
+  notification_seq: 7,
+  is_filtered: false,
+  initiator_id: 10001,
+  comment: `
+问题：从哪了解到本群的
+答案：GitHub
+  `.trim(),
+});
+```
+
+## 完整示例 [#完整示例]
+
+所有刚才的介绍都只涉及了我们该如何模拟用户输入，但更重要的部分在于检查插件对这些输入的响应。`MockMilkyClient` 提供了一个名叫 `apiCalls` 的属性，来记录由 `Context` 发起的所有 API 调用。每当插件调用一个 API 时，`apiCalls` 中就会记录下这个调用的端点和参数，你可以检查 `apiCalls` 的最后若干条记录来验证插件是否正确地调用了预期的 API，以及调用时使用了正确的参数。
+
+例如，仍然以我们的 Echo 机器人为例，让我们编写一个完整的测试：
+
+```typescript
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+test('echo plugin echoes string input prefixed with echo', async () => {
+  const client = createMockMilkyClient();
+  const ctx = Context.fromClient(client);
+  ctx.install(EchoPlugin);
+  await ctx.start();
+
+  await client.receiveFriend({ userId: 10001 }, inmsg`echo Hello`);
+
+  assert.deepEqual(client.apiCalls.at(-1), {
+    endpoint: 'send_friend_message',
+    params: {
+      user_id: 10001,
+      message: [{ type: 'text', text: 'Hello' }],
+    },
+  });
+});
+```
+
+
+# 开发插件 (/docs/development/plugin)
+
+
+
+在 Fraq 中，插件（Plugin）是一个可选、可复用的模块化组件，用于封装特定的功能或一组相关的功能。插件可以包含指令、事件处理器等，并且可以被其他插件依赖和调用，只要声明并提供了对应的服务（Service）。下面我们来介绍一下如何定义和使用插件。
+
+## 定义与安装插件 [#定义与安装插件]
+
+插件通过 `definePlugin` 函数来定义。例如，我们将之前例子中的 Echo 机器人封装成一个插件：
+
+```typescript
+import { definePlugin } from '@fraqjs/fraq';
+
+export const EchoPlugin = definePlugin({
+  name: 'echo',
+  apply(ctx) {
+    ctx.router.command({
+      name: 'echo',
+      pattern: {
+        content: param.str(),
+      },
+      execute(session, { content }) {
+        session.reply(msg`You said: ${content}`);
+      },
+    });
+  },
+});
+
+// 推荐同时将插件进行默认导出
+export default EchoPlugin;
+```
+
+我们可以看到，插件是一个对象，它有一个 `name` 字段和一个 `apply` 方法。`name` 用于标识插件，`apply` 会在插件被加载时被调用，并且会传入一个 `Context` 对象作为参数。在 `apply` 方法中，我们可以像之前一样定义指令、事件处理器等。
+
+在安装插件时，只需要调用 `ctx.install` 方法，并传入插件对象即可：
+
+```typescript
+import EchoPlugin from '...';
+
+ctx.install(EchoPlugin);
+```
+
+{/* prettier-ignore */}
+
+<Callout>
+  即使是在你自己开发的机器人中，也强烈建议将功能模块封装成插件，这样可以更好地组织代码，并且在需要的时候可以方便地复用和共享这些功能模块。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+## 接受用户配置 [#接受用户配置]
+
+有时候，我们希望插件能够接受用户的配置，以便在不同的场景下有不同的表现。通过 `definePlugin` 传入的 `apply` 回调函数可以接受更多的参数作为用户配置。例如，我们想要给机器人的回复消息添加一个用户可配置的表情前缀，可以这样定义插件：
+
+```typescript
+definePlugin({
+  name: 'echo',
+  apply(
+    ctx,
+    options: {
+      prefixFaceId: number;
+    },
+  ) {
+    ctx.router.command({
+      name: 'echo',
+      pattern: {
+        content: param.str(),
+      },
+      execute(session, { content }) {
+        session.reply(
+          msg`${seg.face(options.prefixFaceId)} You said: ${content}`,
+        );
+      },
+    });
+  },
+});
+```
+
+这样，用户在安装插件时需要进行如下配置：
+
+```typescript
+ctx.install(EchoPlugin, {
+  prefixFaceId: 42,
+});
+```
+
+{/* prettier-ignore */}
+
+<Callout>
+  `definePlugin` 并没有限制 `apply` 函数的参数数量，你可以根据需要定义任意的参数来接受用户配置。你甚至可以定义如下的插件：
+
+  ```typescript
+  definePlugin({
+    name: 'example',
+    apply(ctx, foo: string, bar: number, baz: boolean) {
+      // ...
+    },
+  });
+  ```
+
+  但建议不要定义过多的参数，以免让用户在安装插件时感到困惑。
+
+  强烈建议接受一个配置对象作为参数，并且所有的配置项都是 **JSON 可序列化**的类型。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+## 依赖注入 [#依赖注入]
+
+插件不仅能用来封装功能，还可以用来提供服务（Service）供其他插件依赖和调用。假设我们有一个 `AlphaService`，它提供了一个 `alpha` 方法：
+
+```typescript
+class AlphaService {
+  alpha() {
+    return 'alpha';
+  }
+}
+```
+
+插件可以在定义时声明并通过 `ctx.provide` 方法提供一个服务：
+
+```typescript
+const PluginA = definePlugin({
+  name: 'plugin-a',
+  provides: [AlphaService],
+  apply(ctx) {
+    ctx.provide(AlphaService, new AlphaService());
+  },
+});
+```
+
+其他插件可以用 `inject` 字段来声明对这个服务的依赖，并且在 `apply` 方法中直接通过 `ctx` 参数来访问这个服务实例：
+
+```typescript
+const PluginB = definePlugin({
+  name: 'plugin-b',
+  inject: {
+    alpha: AlphaService,
+  },
+  apply(ctx) {
+    console.log(ctx.alpha.alpha()); // prints 'alpha'
+  },
+});
+```
+
+这里的 `provides` 和 `inject` 很重要，它告诉 Fraq 哪个插件提供了 `AlphaService`，哪个插件依赖了 `AlphaService`，Fraq 会根据这些信息来正确地加载和初始化插件。例如，如果用户同时安装了 `PluginA` 和 `PluginB`，Fraq 会确保在加载 `PluginB` 之前先加载 `PluginA`，以保证 `AlphaService` 已经被提供了。如果用户安装了 `PluginB` 而没有安装 `PluginA`，Fraq 会抛出一个错误，提示缺少依赖。
+
+### 使用 `requires` 声明依赖 [#使用-requires-声明依赖]
+
+可以使用 `requires` 字段来声明对 `AlphaService` 的依赖，并通过 `ctx.resolve` 方法来获取这个服务的实例：
+
+```typescript
+const PluginB = definePlugin({
+  name: 'plugin-b',
+  requires: [AlphaService],
+  apply(ctx) {
+    const alphaService = ctx.resolve(AlphaService);
+    console.log(alphaService.alpha()); // prints 'alpha'
+  },
+});
+```
+
+需要注意的是，`inject` 和 `requires` 不能同时使用在同一个插件中，因为它们的作用是相同的，都是用来声明插件的依赖关系的；如果同时使用，Fraq 会抛出一个错误提示。推荐使用 `inject` 这种更加简便的方式来声明和解析依赖。
+
+### 声明可选依赖 [#声明可选依赖]
+
+除此之外，我们还可以用 `optionalInject` 来声明可选依赖，例如：
+
+```typescript
+const PluginC = definePlugin({
+  name: 'plugin-c',
+  optionalInject: {
+    alpha: AlphaService,
+  },
+  apply(ctx) {
+    if (ctx.alpha) {
+      console.log(ctx.alpha.alpha());
+    } else {
+      console.log('AlphaService is not provided');
+    }
+  },
+});
+```
+
+当然也可以用 `optionalRequires` 来声明可选依赖。`Context` 还提供了 `tryResolve` 和 `isProvided` 方法，分别用于尝试获取一个服务的实例（如果没有提供则返回 `undefined`）和检查一个服务是否已经被提供了。用例如下：
+
+```typescript
+const PluginC = definePlugin({
+  name: 'plugin-c',
+  optionalRequires: [AlphaService],
+  apply(ctx) {
+    if (ctx.isProvided(AlphaService)) {
+      // 可以被安全地调用，因为我们已经检查过它是否被提供了
+      const alphaService = ctx.resolve(AlphaService);
+      console.log(alphaService.alpha());
+    } else {
+      console.log('AlphaService is not provided');
+    }
+    // OR:
+    const alphaService = ctx.tryResolve(AlphaService);
+    if (alphaService) {
+      console.log(alphaService.alpha());
+    } else {
+      console.log('AlphaService is not provided');
+    }
+  },
+});
+```
+
+### `Service` 的生命周期 [#service-的生命周期]
+
+Fraq 提供了一个 `Disposable` 接口，如果一个服务实现了这个接口，那么当插件被卸载时，Fraq 会自动调用它的 `dispose` 方法来进行清理工作。例如：
+
+```typescript
+import type { Disposable } from '@fraqjs/fraq';
+
+class DisposableService implements Disposable {
+  dispose() {
+    console.log('Service is being disposed');
+  }
+}
+```
+
+{/* prettier-ignore */}
+
+<Callout type="warn">
+  [`esnext.disposable.d.ts`](https://github.com/microsoft/TypeScript/blob/main/src/lib/esnext.disposable.d.ts) 也提供了一个 `Disposable` 接口，但其声明与 Fraq 的 `Disposable` 接口不同。
+
+  `ESNext` 的 `Disposable` 接口声明如下：
+
+  ```typescript
+  interface Disposable {
+    [Symbol.dispose](): void;
+  }
+  ```
+
+  因此，如果你想要在 Fraq 中使用 `Disposable` 接口来管理服务的生命周期，请确保你显式导入了 `@fraqjs/fraq` 包中的 `Disposable` 接口，否则你实现的将是 `ESNext` 中的 `Disposable` 接口。
+
+  相应地，为了避免这种情况的发生，Fraq 在 `Context` 的 `provide` 方法中增加了一个检查，如果你提供的服务实现了 `ESNext` 的 `Disposable` 但没有实现 Fraq 的 `Disposable`，Fraq 会抛出一个错误，提示你正确地导入和实现 Fraq 的 `Disposable` 接口。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+那么在 `Context` 卸载 `DisposableService` 时，控制台会输出 `Service is being disposed`。关于 `Context` 生命周期结束时的行为，请见[上下文 (Context)](./digging/context.mdx#停止-context) 中的介绍。
+
+## `start` 方法 [#start-方法]
+
+插件还可以定义一个可选的 `start` 方法，这个方法会在所有插件都被加载和初始化之后被调用。`start` 方法通常用于执行一些需要**在所有插件都准备好之后**才能执行的操作。`Context` 会在所有插件的 `apply` 方法都被调用之后，按照与调用 `apply` 方法相同的顺序来调用插件的 `start` 方法。
+
+{/* prettier-ignore */}
+
+<Callout>
+  不要滥用 `start` 方法，只有在确实需要在所有插件都准备好之后才能执行的操作才应该放在 `start` 方法中。大多数情况下，你应该把插件的逻辑放在 `apply` 方法中，这样可以更好地利用 Fraq 的依赖注入机制，并且让插件的加载和初始化过程更加清晰和可预测。
+
+  为了防止滥用，`start` 方法只接受一个 `Context` 参数，而不会接受与 `apply` 方法相同的用户配置参数。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+
+# 项目规范 (/docs/development/project)
+
+
+
+
+
+对于一个插件项目，你可以按照如下的结构来组织你的代码：
+
+<Files>
+  <Folder name="src">
+    <File name="index.ts" />
+  </Folder>
+
+  <Folder name="test">
+    <File name="my-plugin.test.ts" />
+  </Folder>
+
+  <File name="package.json" />
+
+  <File name="tsconfig.json" />
+
+  <File name="tsdown.config.ts" />
+</Files>
+
+## `tsconfig.json` [#tsconfigjson]
+
+以下是 Fraq 本身及官方插件使用的 `tsconfig.json`，供参考：
+
+```json
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "module": "esnext",
+    "lib": ["ESNext"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "types": ["node"]
+  }
+}
+```
+
+## `tsdown.config.ts` [#tsdownconfigts]
+
+Fraq 推荐使用 [tsdown](https://tsdown.dev/) 来构建你的插件。你可以将 `tsdown` 添加到 `devDependencies`，在项目根目录下创建一个 `tsdown.config.ts` 文件来配置 tsdown，例如：
+
+```ts
+import { defineConfig } from 'tsdown';
+
+export default defineConfig({
+  entry: 'src/index.ts',
+  dts: true,
+});
+```
+
+## `package.json` [#packagejson]
+
+### 命名规范 [#命名规范]
+
+插件的包名应该以 `fraq-plugin-` 开头，或者在你的 npm scope 下以 `fraq-plugin-` 开头，例如：
+
+* `fraq-plugin-echo`
+* `@your-scope/fraq-plugin-echo`
+
+官方插件则以 `@fraqjs/plugin-` 开头，例如：
+
+* `@fraqjs/plugin-conversation`
+* `@fraqjs/plugin-random`
+
+### `type` 字段 [#type-字段]
+
+虽然不是必需，但强烈建议在你的 `package.json` 文件中添加 `"type": "module"` 字段。这会将项目下所有的 JS 文件视为 ES Module，这对于现代 JavaScript 开发来说是一个好习惯，可以帮助你规避许多潜在的 CJS/ESM 语法问题。
+
+### 入口点文件 [#入口点文件]
+
+你的插件需要在 `package.json` 中正确包含并导出。通常，我们不直接导出 `src/index.ts`，而是将构建后的文件（例如 `dist/index.js`）作为入口点。例如，对于用 `tsdown` 构建的插件，文件会位于 `dist` 目录下，你可以在 `package.json` 中这样配置：
+
+```json
+{
+  "files": ["dist"],
+  "main": "dist/index.mjs",
+  "typings": "dist/index.d.mts"
+}
+```
+
+如果你的项目除了 `dist` 之外还有其他用到的文件，请确保它们也被正确地包含在 `files` 字段中。
+
+### 声明依赖 [#声明依赖]
+
+插件应该至少将 `@fraqjs/fraq` 声明为 `peerDependencies`。此外，如果你的插件依赖了其他的插件，你也应该将它们声明为 `peerDependencies`。
+
+如果你的插件在运行时需要使用某些库（例如 `axios`），你可以将它们声明为 `dependencies`。
+
+对于开发时所用的工具，例如 `tsdown`、`tsx` 和 `typescript`，则应该声明为 `devDependencies`。
+
+### 开放源代码 [#开放源代码]
+
+Fraq 鼓励插件开发者积极开源自己的插件。为了方便使用者查询源代码仓库，可以在 `package.json` 中添加 `repository` 字段来指向你的代码仓库，例如：
+
+```json
+{
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-username/your-repo.git"
+  }
+}
+```
+
+此外，还可以通过 `license` 字段来声明你的插件的许可证类型，例如 `GPL-3.0-only`、`MIT`、`ISC` 等。
+
+## 编写测试 [#编写测试]
+
+Fraq 建议将测试代码放在 `test` 目录下。Fraq 中的测试一般分为两大类：
+
+### 冒烟测试 (Smoke Test) [#冒烟测试-smoke-test]
+
+在一个真实的 Fraq 实例中测试插件的整体功能是否正常，形如在 “快速开始” 中提到的启动脚本。你可以在这个启动脚本中安装你的插件，将其对接到一个真实的 Milky 实例上，实际测试它的功能是否正常。随后，你可以用 `tsx` 来运行这个脚本，来进行冒烟测试：
+
+```bash
+npx tsx smoke-test.ts
+```
+
+{/* prettier-ignore */}
+
+<Callout type="idea">
+  “Smoke Test” 一词来源于电子硬件行业。在电路板组装完成后，第一个测试就是通电，检查电路板是否有元件因短路而冒烟烧毁。后来这个术语被软件行业借用，指代在一个真实环境中测试软件的基本功能是否正常的测试方法。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+你可能不愿意在测试过程中让其他用户意外触发插件，这时你可以给 `Context` 配置 `filter`，详见 [“上下文 (Context)“](./digging/context.mdx#事件过滤) 的相关章节。
+
+### Mock 测试 (Mock Test) [#mock-测试-mock-test]
+
+使用 `node:test` 等测试框架并且结合 [`@fraqjs/mock`](./mocking.mdx) 来分单元、分场景测试插件中的单个功能是否按照预期工作。`@fraqjs/mock` 是一个用于模拟 Milky 客户端的库，并且包含了模拟消息发送、API Stub 等功能。
+
+对于单元测试，建议将测试文件命名为 `*.test.ts`，并且放在 `test` 目录下。你可以在 `package.json` 中添加一个 `test` script 来运行你的测试，例如：
+
+```json
+{
+  "scripts": {
+    "test": "tsx --test test/**/*.test.ts"
+  }
+}
+```
+
+## 准备发布 [#准备发布]
+
+在完成了一个插件后，你可能会想要将其发布到 npm Registry 上，以便其他人也能使用它。发布插件的过程与发布普通的 npm 包是一样的，你需要在你的项目中的 `package.json` 文件中确保你的插件代码被正确地导出，并且在发布前触发一次构建来生成最终的输出文件。为此，你可以配置 `prepack` script：
+
+```json
+{
+  "scripts": {
+    "build": "tsdown",
+    "prepack": "npm run build"
+  }
+}
+```
+
+万事俱备，你可以使用 `npm publish` 命令来发布你的插件了。
+
+{/* prettier-ignore */}
+
+<Callout>
+  2025 年年末开始，npm 增强了对 `publish` 的安全防护。如果你在发布插件时看到如下的报错：
+
+  ```
+  npm error code ENEEDAUTH
+  npm error need auth This command requires you to be logged in to https://registry.npmjs.org/
+  npm error need auth You need to authorize this machine using `npm adduser`
+  # or
+  [E404] 404 Not Found - PUT https://registry.npmjs.org/... - Not found
+  ```
+
+  这意味着你需要先使用 `npm login` 命令登录你的 npm 账号，然后再使用 `npm publish` 来发布你的插件。npm 要求登录和发布流程都进行 2FA 验证，你也可以考虑通过配置 Granular Access Token 来简化这个流程，详见 npm 官方文档的 [Creating and viewing access tokens](https://docs.npmjs.com/creating-and-viewing-access-tokens) 章节。
+
+  此外，对于已经发布过一次及以上的插件，还可以配置 Trusted Publishers 并且在 GitHub Actions 中发布插件，详见 npm 官方文档的 [Trusted publishing for npm packages](https://docs.npmjs.com/trusted-publishers) 章节。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+
+# 调用协议功能 (/docs/development/protocol)
+
+
+
+## 监听事件 [#监听事件]
+
+Milky 协议定义了许多种类的[事件](https://milky.ntqqrev.org/struct/Event)，前面讲到的指令实际上是对 `message_receive` 事件的封装。Fraq 响应指令的流程大致如下：
+
+1. 协议端接收到消息；
+2. 协议端向 Fraq 推送一个 `message_receive` 事件，事件对象中包含了消息的来源、发送者、消息内容等；
+3. Fraq 根据事件对象中的信息，匹配到对应的指令处理函数，并调用它；
+4. 指令处理函数通过 `Session` 对象来回复消息。
+
+`message_receive` 事件不止可以被当作指令处理，我们也可以通过 `ctx.on` 直接监听这个事件：
+
+```typescript
+ctx.on('message_receive', ({ data }) => {
+  // do something with the raw event data
+});
+```
+
+一个事件对象包含如下字段：
+
+* `event_type`: 事件类型，例如 `message_receive`、`message_recall` 等。
+* `self_id`: 事件发生的机器人 QQ 号。
+* `time`: 事件发生的时间戳。
+* `data`: 事件数据对象，包含了与事件相关的各种信息。
+
+我们对其中的 `data` 更感兴趣，因此在这里同样使用了解构赋值的语法来直接获取它。拿到了事件数据后，我们就可以根据它的内容来做一些处理了。
+
+当然，我们不止可以监听 `message_receive` 事件，Milky 协议定义了许多其他的事件，例如 `message_recall`（消息撤回）、`group_join_request`（加群请求）等，我们都可以通过 `ctx.on` 来监听它们：
+
+```typescript
+ctx.on('message_recall', ({ data }) => {
+  // someone recalled a message
+});
+
+ctx.on('group_join_request', ({ data }) => {
+  // someone requested to join a group
+});
+```
+
+`ctx.on` 会返回一个 `() => void` 的函数，用于取消事件监听。例如，我们可以这样监听 `message_receive` 事件，并在需要时取消监听：
+
+```typescript
+const off = ctx.on('message_receive', ({ data }) => {
+  console.log('Received message:', data);
+});
+
+// 需要取消监听时调用 off 函数
+off();
+```
+
+## 调用 API [#调用-api]
+
+在前面的例子中，我们的响应操作仅限于调用 `session.reply` 来回复消息。Milky 协议定义了丰富的 [API](https://milky.ntqqrev.org/api/system)，我们可以通过 `ctx.client` 来调用它们：
+
+```typescript
+// 获取登录信息
+const loginInfo = await ctx.client.get_login_info();
+
+// 给消息添加表情回应
+await ctx.client.send_group_message_reaction({
+  group_id: 123456789,
+  message_seq: 23456,
+  reaction: '42',
+});
+```
+
+通过监听事件和调用 API，我们可以实现更加丰富的机器人功能。
+
+
+# 第一个 Fraq 机器人 (/docs/development/start)
+
+
+
+我们从一个 Echo 机器人开始。它的功能很简单：在任何一个包含它的会话（私聊或群聊）中，只要发送
+
+```
+echo <任意文本>
+```
+
+机器人就会相应地发送一条
+
+```
+You said: <任意文本>
+```
+
+的消息。下面我们开始编写这个机器人。
+
+## 编写代码 [#编写代码]
+
+首先，启动你的 Milky 协议端，并确认它监听的地址与端口。然后，在你的项目中创建一个 `index.ts` 文件，并添加以下代码：
+
+```typescript
+import { Context, param } from '@fraqjs/fraq';
+
+const ctx = Context.fromUrl('<替换成你的 Milky 协议端地址>', {
+  // accessToken: '<如果你的 Milky 协议端配置了 token，请在这里添加>',
+});
+
+ctx.router.command({
+  name: 'echo',
+  pattern: {
+    content: param.str(),
+  },
+  execute(session, { content }) {
+    session.reply([
+      {
+        type: 'text',
+        data: {
+          text: `You said: ${content}`,
+        },
+      },
+    ]);
+  },
+});
+
+ctx.start();
+```
+
+在一切完成之后，用 `tsx` 执行你的 `index.ts` 文件：
+
+```bash
+npx tsx index.ts
+# 或 tsx index.ts, 如果你全局安装了 tsx
+```
+
+你可以在任何一个包含它的会话中发送 `echo Hello` 来测试它是否正常工作。
+
+## 到底做了些什么？ [#到底做了些什么]
+
+我们来逐行解释一下上面的代码：
+
+```typescript
+const ctx = Context.fromUrl('<替换成你的 Milky 协议端地址>');
+```
+
+`Context` 是 Fraq 的核心类，代表了一个机器人实例，它包含了机器人的配置、状态、路由等信息。我们通过 `Context.fromUrl` 方法来创建一个新的 `Context` 实例，并传入 Milky 协议端的地址。
+
+```typescript
+ctx.router.command({
+  name: 'echo',
+  pattern: {
+    content: param.str(),
+  },
+  execute(session, { content }) {
+    session.reply([
+      {
+        type: 'text',
+        data: {
+          text: `You said: ${content}`,
+        },
+      },
+    ]);
+  },
+});
+```
+
+`router` 是 `Context` 实例的一个属性，我们用它来定义机器人将会响应哪些指令，并且这些指令的规则分别是什么样的。`ctx.router.command` 方法用来定义一个指令。它接受一个对象，其中包含：
+
+* `name` 是指令的名称，这里是 `echo`，表示当用户发送的消息以 `echo` 开头时，这个指令就会被触发。
+* `pattern` 是一个对象，定义了这个指令的参数规则。我们给 `echo` 指令定义了一个 `content` 参数，它是一个字符串类型的参数，表示用户在 `echo` 后面输入的文本内容。
+* `execute` 是一个方法，当指令被触发时，这个方法会被调用。它接受两个参数：`session` 和一个包含指令参数的对象。
+  * `session` 代表了当前的会话，可以用它来发送回复消息等操作。我们在回调函数中使用 `session.reply` 方法来回复一条消息。
+  * 第二个参数是一个对象，包含了指令的参数，这里我们通过[解构赋值](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/Destructuring)的方式直接获取了 `content` 参数。得益于 TypeScript 的类型推断，编译器知道 `content` 是一个字符串类型的参数，因此我们不需要再重复声明它的类型。
+
+```typescript
+ctx.start();
+```
+
+最后，我们调用 `ctx.start` 方法来启动机器人，使它开始连接 Milky 协议端并监听消息。你可以随时使用 Ctrl+C 来停止机器人。
+
+## 下一步 [#下一步]
+
+如果一切正常，恭喜你，你已经成功创建了一个简单的 Fraq 机器人！你可能会觉得上面回复消息的代码有些啰嗦，毕竟我们只是想回复一条简单的文本消息，却用了足足 8 行代码来表示这条消息。别担心，下一节就会介绍更加简洁的写法。祝你玩得开心！
+
+
+# @fraqjs/plugin-ai (/docs/plugins/ai)
+
+
+
+<NpmBadge packageName="@fraqjs/plugin-ai" />
+
+`@fraqjs/plugin-ai` 提供了配置模型提供商和 API Key 的统一入口，方便基于 [Vercel AI SDK](https://ai-sdk.dev/) 的 AI 插件开发者访问用户开发者配置的语言模型。
+
+## 安装与配置 [#安装与配置]
+
+将插件添加至 `dependencies`，然后在创建 `Context` 时引入并配置插件：
+
+```typescript
+import AiPlugin from '@fraqjs/plugin-ai';
+
+ctx.install(AiPlugin, {
+  // 在这里声明多个 AI SDK 提供商，每个提供商下配置多个模型
+  providers: {
+    // 提供商的名称可以自定义，建议使用 SDK 包名中的关键词以示区分
+    deepseek: {
+      // 目前支持自动配置的 SDK 包括：
+      // - `@ai-sdk/anthropic`
+      // - `@ai-sdk/deepseek`
+      // - `@ai-sdk/google`
+      // - `@ai-sdk/openai`
+      // 在这里声明 SDK 之后，你需要手动将对应的 SDK 添加到项目的 `dependencies` 中
+      sdk: '@ai-sdk/deepseek',
+      // 这里用于提供传入 SDK 的配置项
+      // 基本的配置项有：
+      // - `apiKey`：必需，用户的 API Key
+      // - `baseURL`：可选，API 的基础 URL，默认为 SDK 内置的 URL
+      // 例如，DeepSeek 的默认 URL 是 `https://api.deepseek.com/v1`
+      // 不同 SDK 能接受的配置项不同，具体请参考对应 SDK 的文档
+      options: {
+        apiKey: 'ds-xxx',
+      },
+      // models 是一个字符串数组，用于声明用户想要使用的模型名称
+      // 具体模型名称需要参考对应提供商 / SDK 的文档
+      // 例如 DeepSeek 的模型名称包括 `deepseek-v4-flash`、`deepseek-v4-pro` 等
+      models: ['deepseek-v4-flash', 'deepseek-v4-pro'],
+    },
+    'openai-custom': {
+      sdk: '@ai-sdk/openai',
+      options: {
+        apiKey: 'sk-xxx',
+        // 可以通过 `baseURL` 配置自定义的 API URL
+        // OpenAI 风格的 API 通常以 `/v1` 结尾
+        baseURL: 'https://my-openai-api.com/v1',
+      },
+      models: ['gpt-5.5', 'gpt-5.5-mini'],
+    },
+    // 也可以直接在 providers 中提供模型实例
+    moonshot: {
+      'kimi-k2.5': (await import('@ai-sdk/moonshotai')).moonshot('kimi-k2.5'),
+    },
+  },
+
+  // 在这里为模型配置别名，方便在插件中使用更友好的名称访问模型
+  // 键 (key) 为别名，值 (value) 为 providers 中声明的模型名称，格式为 `提供商名称/模型名称`
+  // 例如 `fast` 对应 `deepseek` 提供商下的 `deepseek-v4-flash` 模型
+  aliases: {
+    fast: 'deepseek/deepseek-v4-flash',
+    'fast-gpt': 'openai-custom/gpt-5.5-mini',
+    balanced: 'deepseek/deepseek-v4-pro',
+    expert: 'openai-custom/gpt-5.5',
+  },
+
+  // 默认模型，插件中通过 `ctx.ai.model()` 访问时，如果没有指定模型名称，就会使用这个默认模型
+  // 可以使用别名或者 `提供商名称/模型名称` 的格式指定默认模型
+  // 如果没有配置这一项，默认使用 providers 中第一个提供商的第一个模型作为默认模型
+  defaultModel: 'fast',
+});
+```
+
+{/* prettier-ignore-start */}
+
+<Callout>
+  `ai` 在不同的 provider 之间共享全局状态，请确保你的项目中只有一份 `ai` 实例。本插件将 `ai` 声明为 `peerDependencies`，你需要在自己的项目中将它添加到 `dependencies`。
+
+  此外，如果你通过直接声明 SDK 名称的方式配置了模型提供商，也需要将对应的 SDK 包添加到 `dependencies` 中。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+如果你是插件开发者，请将本插件添加到项目的 `peerDependencies` 中，并在自己的插件中声明依赖：
+
+```typescript
+import { definePlugin } from '@fraqjs/fraq';
+import { AiService } from '@fraqjs/plugin-ai';
+
+definePlugin({
+  name: 'my-plugin',
+  inject: {
+    ai: AiService,
+  },
+  apply(ctx) {
+    // 通过 ctx.ai.model 访问配置好的模型
+  },
+});
+```
+
+此外，你还需要将 `ai` 添加到 `peerDependencies` 中，以便使用其中的函数。
+
+## 获取模型实例 [#获取模型实例]
+
+插件会将用户配置的模型实例注入到 `ctx.ai` 中，你可以通过 `ctx.ai.model` 方法来获取模型实例：
+
+```typescript
+const model = ctx.ai.model(); // 获取默认模型，即用户配置中的 defaultModel，或者 providers 中第一个模型
+const fastModel = ctx.ai.model('fast'); // 通过别名获取模型
+const kimiModel = ctx.ai.model('moonshot/kimi-k2.5'); // 通过提供商名称/模型名称的格式获取模型
+
+ctx.ai.hasModel('fast'); // true
+ctx.ai.hasModel('nonexistent'); // false
+
+ctx.ai.models(); // 获取所有模型的名称列表
+```
+
+## 调用 AI 功能 [#调用-ai-功能]
+
+Vercel 的 `ai` 包提供了丰富的函数来调用语言模型，只需要传入模型实例和相应的参数即可。下面是一些简单的例子，更多用法请参考 [Vercel AI SDK 的文档](https://ai-sdk.dev/docs)。
+
+### 生成文本 [#生成文本]
+
+```typescript
+import { generateText } from 'ai';
+
+const { text } = await generateText({
+  model: ctx.ai.model(),
+  prompt: '用一句话介绍一下 Fraq。',
+});
+
+console.log(text);
+```
+
+### 流式生成文本 [#流式生成文本]
+
+`streamText` 会返回一个流式结果，你可以通过 `textStream` 异步迭代器逐段读取生成的文本：
+
+```typescript
+import { streamText } from 'ai';
+
+const result = streamText({
+  model: ctx.ai.model(),
+  prompt: '写一首关于海的短诗。',
+});
+
+for await (const delta of result.textStream) {
+  process.stdout.write(delta);
+}
+```
+
+### 生成结构化数据 [#生成结构化数据]
+
+`generateText` 和 `streamText` 都支持通过 `output` 选项来指定生成结果的格式：
+
+```typescript
+import { generateText, Output } from 'ai';
+import z from 'zod';
+
+const { output } = await generateText({
+  model: ctx.ai.model(),
+  output: Output.object({
+    schema: z.object({
+      recipe: z.object({
+        name: z.string(),
+        ingredients: z.array(
+          z.object({ name: z.string(), amount: z.string() }),
+        ),
+        steps: z.array(z.string()),
+      }),
+    }),
+  }),
+  prompt: '请生成一份阳春面的食谱。',
+});
+```
+
+这里输出的 `output` 将会是一个符合指定 Zod schema 的对象。
+
+{/* prettier-ignore */}
+
+<Callout>
+  同样的，如果你在插件中使用 `zod`，也需要将 `zod` 添加到 `peerDependencies` 中。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+### 工具调用 [#工具调用]
+
+`generateText` 和 `streamText` 都支持工具调用（Tool Calling），你可以通过 `tools` 选项让模型在生成过程中调用你定义的函数：
+
+```typescript
+import { generateText, tool } from 'ai';
+import z from 'zod';
+
+const { toolResults } = await generateText({
+  model: ctx.ai.model(),
+  prompt: '东京现在的天气怎么样？',
+  tools: {
+    weather: tool({
+      description: '查询某个城市的天气',
+      inputSchema: z.object({
+        city: z.string().describe('城市名称'),
+      }),
+      execute: async ({ city }) => `${city}今天是晴天`,
+    }),
+  },
+});
+
+console.log(toolResults);
+```
+
+
+# @fraqjs/plugin-conversation (/docs/plugins/conversation)
+
+
+
+<NpmBadge packageName="@fraqjs/plugin-conversation" />
+
+`@fraqjs/plugin-conversation` 提供了对多轮对话的支持，帮助开发者编写交互式机器人功能。
+
+## 安装与配置 [#安装与配置]
+
+将插件添加至 `dependencies`，然后在创建 `Context` 时引入并配置插件：
+
+```typescript
+import ConversationPlugin from '@fraqjs/plugin-conversation';
+
+ctx.install(ConversationPlugin, {
+  // 在这里传入 ConversationPlugin 的配置选项
+});
+```
+
+`ConversationPlugin` 有如下配置项：
+
+* `defaultTimeout`：默认的对话超时时间，单位是毫秒。默认值为 30000（30 秒）。如果用户在这个时间内没有回复，当前对话会自动结束。
+* `onCollision`：当用户触发一个新的会话时，如何处理旧的会话。可选值有：
+  * `reject-incoming`：默认值，拒绝建立新的会话，抛出一个 `ConversationRejectionError`。
+  * `abort-existing`：结束旧的会话，建立新的会话，并且在旧的会话处抛出一个 `ConversationAbortionError`。
+
+如果你是插件开发者，请将本插件添加到项目的 `peerDependencies` 中，并在自己的插件中声明依赖：
+
+```typescript
+import { ConversationService } from '@fraqjs/plugin-conversation';
+
+definePlugin({
+  name: 'my-plugin',
+  inject: {
+    conversation: ConversationService,
+  },
+  apply(ctx) {
+    // 使用 ctx.conversation 来访问 ConversationService
+  },
+});
+```
+
+## 开发交互功能 [#开发交互功能]
+
+考虑下面的对话场景：
+
+```
+用户: 天气
+机器人: 你想查询哪个城市的天气呢？
+用户: 北京
+机器人: 北京今天晴，最高气温...
+```
+
+传统的 `ctx.router.command` 遵循单纯的命令-响应模式，不适合处理多轮对话。但使用 `ctx.conversation.command`，我们可以轻松地实现这个功能。与前者不同，`ctx.conversation.command` 的 `execute` 方法接受第三个参数 `scope`，它包含一个函数 `open`，我们可以通过它来启动一个新的会话：
+
+```typescript
+ctx.conversation.command({
+  name: '天气',
+  pattern: {},
+  async execute(session, _, { open }) {
+    await session.reply(msg`你想查询哪个城市的天气呢？`);
+
+    const city = await open<string>(({ router, done }) => {
+      router.rawPattern({
+        pattern: { city: param.str() },
+        async execute(_, { city }) {
+          done(city);
+        },
+      });
+    }); // city: string | null
+    if (city === null) {
+      return;
+    }
+
+    const weatherInfo = await getWeatherForCity(city);
+    await session.reply(msg`${weatherInfo}`);
+  },
+});
+```
+
+在这个例子中，插件接收到 “天气” 这个输入时，会先回复一个问题，然后通过 `open` 启动一个新的会话。`open<R>` 函数传入的回调函数接受一个 `ConversationContext<R>` 对象，包含以下属性：
+
+* `router`：一个新的 `Router` 实例，用于在会话中定义输入模式和对应的处理函数。在这个 `Router` 中定义的路由只会在当前会话中生效，不会影响全局的 `ctx.router`。此外，传入这个 `router` 的回调函数的 `session` 中，`raw` 字段会被替换为触发当前路由的原始输入内容，其余字段与你传入 `open` 的 `session` 相同。
+* `done(result: R)`：一个函数，用于结束会话并返回结果。当你调用 `done` 时，`ctx.conversation.open` 返回的 Promise 会被 resolved，值就是你传入 `done` 的参数。
+* `abort(reason?: string)`：一个函数，用于主动终止会话，并且可以传入一个字符串作为终止原因。当你调用 `abort` 时，`ctx.conversation.open` 返回的 Promise 会被 rejected，错误类型是 `ConversationAbortionError`，错误消息包含你传入的终止原因。
+
+我们在代码中使用了其中的 `router` 来定义了一个 `rawPattern` 路由，这个路由会匹配用户的任意输入，并且将输入内容作为字符串参数 `city` 传入回调函数。当用户输入符合这个模式时，我们调用 `done(city)` 来结束会话，并将用户输入的城市名称作为结果返回。
+
+### 可选配置 [#可选配置]
+
+`open` 函数还可以接受一个可选的配置对象，支持以下配置项：
+
+* `timeout`：会话的超时时间，单位是毫秒。默认值为插件配置中的 `defaultTimeout`。如果配置了这个值，它将会覆盖插件配置中的 `defaultTimeout`，成为当前会话的超时时间。
+
+## 处理特殊情况 [#处理特殊情况]
+
+### 超时情况 [#超时情况]
+
+从代码中可以看出，`open` 方法有可能返回 `null`，这表示会话超出了配置的等待时间限制，你需要显式地检查这种情况来处理超时。代码中的处理是直接 `return`，即不再执行后续逻辑；但你也可以发送一个提示消息，或使用 `while` 循环来重新发起会话等。
+
+### 会话冲突情况 [#会话冲突情况]
+
+`open` 方法还可能抛出两种错误：
+
+* `ConversationRejectionError`：当发生会话冲突且 `onCollision` 配置为 `reject-incoming` 时抛出，表示新的会话请求被拒绝。
+* `ConversationAbortionError`：
+  * 当发生会话冲突且 `onCollision` 配置为 `abort-existing` 时，旧的会话会被结束，并在旧的会话处抛出这个错误。
+  * 当调用 `abort` 方法时抛出，表示当前会话被主动终止，并且包含终止原因。
+
+一般情况下这些错误会被框架捕获并忽略，但你也可以通过 `try...catch` 来捕获这些错误，并进行相应的处理。
+
+
+# @fraqjs/plugin-kysely (/docs/plugins/kysely)
+
+
+
+<NpmBadge packageName="@fraqjs/plugin-kysely" />
+
+`@fraqjs/plugin-kysely` 提供了基于 [Kysely](https://kysely.dev/) 的 SQLite 数据库服务。
+
+## 安装与配置 [#安装与配置]
+
+将插件添加至 `dependencies`，然后在创建 `Context` 时引入并配置插件：
+
+```typescript
+import KyselyPlugin from '@fraqjs/plugin-kysely';
+
+ctx.install(KyselyPlugin, {
+  // 在这里传入 KyselyPlugin 的配置选项
+});
+```
+
+`KyselyPlugin` 有如下配置项：
+
+* `sqliteUrl`：SQLite 数据库的连接 URL，例如 `file:./my-database.sqlite` 或 `:memory:`。
+* `nodeSqliteOptions`：可选的数据库连接选项，除了 `open` 选项之外的其他选项都会被传递给 `DatabaseSync` 的构造函数，详见 [Node.js 官方文档](https://nodejs.org/api/sqlite.html#new-databasesyncpath-options)。
+
+如果你是插件开发者，请将本插件添加到项目的 `peerDependencies` 中，并在自己的插件中声明依赖：
+
+```typescript
+import { definePlugin } from '@fraqjs/fraq';
+import { DatabaseService } from '@fraqjs/plugin-kysely';
+
+definePlugin({
+  name: 'my-plugin',
+  inject: {
+    db: DatabaseService,
+  },
+  apply(ctx) {
+    // 使用 ctx.db 来访问 DatabaseService
+  },
+});
+```
+
+此外，你还需要将 `kysely` 添加到 `dependencies` 中，以便使用其中的类型定义。
+
+## Node.js 兼容性 [#nodejs-兼容性]
+
+`@fraqjs/plugin-kysely` 依赖 `node:sqlite` 来提供数据库功能。此模块在不同 LTS 版本的支持情况如下：
+
+| Node.js 版本                 | 支持情况                                    |
+| -------------------------- | --------------------------------------- |
+| `<22.5.0`                  | 不支持                                     |
+| `22.5.0 <=` 版本 `< 22.13.0` | 支持，需要通过启动参数 `--experimental-sqlite` 来启用 |
+| `>= 22.13.0`               | 支持，不再需要额外启动参数                           |
+
+在低于 `22.5.0` 的 Node.js 版本中将无法使用此插件。`package.json` 中声明的 `engine.node` 字段为 `>=22.13`，在低于这一版本的 Node.js 环境中安装时会有警告提示，但并不会阻止安装。
+
+## 声明数据结构 [#声明数据结构]
+
+`@fraqjs/plugin-kysely` 包含了一个类型 `FraqDatabase`，你可以通过[声明合并（Declaration Merging）](https://www.typescriptlang.org/docs/handbook/declaration-merging.html)来扩展它，以声明你的数据表结构。
+
+Kysely 提供了一个 [Getting Started](https://kysely.dev/docs/getting-started) 指南（英文），你可以在它的 “Types“ 章节中找到关于如何声明数据表的示例。在这里，我们将介绍翻译成中文，并且稍微调整了一下示例代码以适应 Fraq 的插件开发。
+
+```typescript
+import type {
+  ColumnType,
+  Generated,
+  Insertable,
+  JSONColumnType,
+  Selectable,
+  Updateable,
+} from 'kysely';
+
+// 这个接口描述了 `person` 表的结构。
+// Table 接口应该只在上面的 `FraqDatabase` 类型中使用，永远不要作为查询的结果类型！
+// 请参见下面的 `Person`、`NewPerson` 和 `PersonUpdate` 类型。
+export interface PersonTable {
+  // Generated<T> 是一个工具类型，用于标记由数据库自动生成的列，例如自增 ID 或时间戳。
+  // 被标记为 Generated 的列在插入（insert）和更新（update）操作中会被自动设为可选，
+  // 它们的值会由数据库生成，而不是由用户提供。
+  id: Generated<number>;
+
+  first_name: string;
+  gender: 'man' | 'woman' | 'other';
+
+  // 如果数据库中的列是可空（nullable）的，那么在这里也应该将其类型设为可空。
+  // 不要使用可选属性（last_name?: string），
+  // Kysely 会自动根据数据库的定义来确定属性是否可选。
+  last_name: string | null;
+
+  // 可以使用 `ColumnType<SelectType, InsertType, UpdateType>`
+  // 来为每种操作（查询、插入和更新）指定不同的类型。
+  // 在这里，我们定义了一个 `created_at` 列：
+  // - 在查询时被选为 `string` 类型；
+  // - 在插入时可以可选地提供为 `string` 类型；
+  // - 在更新时永远不能提供（即 `never`）。
+  created_at: ColumnType<string, string | undefined, never>;
+
+  // 可以使用 `JSONColumnType` 来声明 JSON 列。
+  // 这是 `ColumnType<T, string, string>` 的简写：
+  // - T 是从数据库中检索到的 JSON 对象/数组的类型；
+  // - 插入和更新类型始终为 `string`，因为在插入和更新时总会序列化成字符串。
+  // 这里我们定义了一个 `metadata` 列，它在查询时被 `select` 成一个对象，
+  // 在插入和更新时被选为 `string` 类型（即 JSON 字符串）。
+  metadata: JSONColumnType<{
+    login_at: string;
+    ip: string | null;
+    agent: string | null;
+    plan: 'free' | 'premium';
+  }>;
+}
+
+// 永远不要直接使用 `PersonTable` 作为查询结果的类型；应该使用：
+// - `Selectable<PersonTable>` 作为查询结果的类型；
+// - `Insertable<PersonTable>` 作为插入操作的参数类型；
+// - `Updateable<PersonTable>` 作为更新操作的参数类型。
+// 这些工具类型会根据 `PersonTable` 中定义的列类型来正确地推断出每种操作的类型。
+//
+// 大多数时候你应该完全信任类型推断，而不需要使用显式的类型。
+// 这些类型在为函数参数添加类型注解时可能会很有用。
+export type Person = Selectable<PersonTable>;
+export type NewPerson = Insertable<PersonTable>;
+export type PersonUpdate = Updateable<PersonTable>;
+
+// 使用声明合并（Declaration Merging）来扩展 `FraqDatabase` 类型，
+// 以包含我们定义的 `my_plugin_person` 表。
+// 一般情况下，用插件名称作为表名前缀是个不错的选择，以免与其他插件定义的表发生冲突。
+declare module '@fraqjs/plugin-kysely' {
+  interface FraqDatabase {
+    my_plugin_person: PersonTable;
+  }
+}
+```
+
+## 迁移 (Migration) [#迁移-migration]
+
+我们刚刚定义了数据库的模式（Schema），也就是说它应该包含哪些表以及每个表有哪些列。但这些工作都是在 TypeScript 类型系统中完成的，并不会自动同步到实际的数据库中。
+
+不能单从字面意思理解“迁移”这个词。它并不是指数据从一个数据库到另一个数据库的迁移，而是指数据库模式（Schema）的迁移。具体来说，它主要包含以下两种过程：
+
+* 当新增一个表时，创建这个表；
+* 当修改了表的结构（例如新增字段、重命名字段、删除字段等）时，更新表的结构以匹配新的定义。
+
+Schema 本身只存在于类型系统，并且 Fraq 也无法比对不同版本的插件之间 Schema 是否发生了变化，因此 Fraq 选择让插件开发者来编写迁移脚本，以便在插件更新时执行这些脚本来同步数据库的结构。为此，`DatabaseService` 提供了一个 `schemas` 属性，插件需要在 `apply` 阶段调用其中的方法来注册 Schema 和迁移脚本。
+
+### 创建数据表 [#创建数据表]
+
+以上面定义的数据结构为例，我们需要编写一个迁移脚本来创建 `my_plugin_person` 表：
+
+```typescript
+import { sql } from 'kysely';
+
+ctx.db.schemas.register({
+  name: 'my_plugin_schema',
+  migrations: {
+    '001_create_person_table': {
+      async up(kysely) {
+        await kysely.schema
+          .createTable('my_plugin_person')
+          .addColumn('id', 'integer', (col) => col.primaryKey())
+          .addColumn('first_name', 'text', (col) => col.notNull())
+          .addColumn('last_name', 'text')
+          .addColumn('gender', 'text', (col) => col.notNull())
+          .addColumn('created_at', 'text', (col) =>
+            col.defaultTo(sql`CURRENT_TIMESTAMP`).notNull(),
+          )
+          .addColumn('metadata', 'text', (col) => col.notNull())
+          .execute();
+      },
+    },
+  },
+});
+```
+
+从代码中可以看到，迁移脚本具有一个名称和一个 `up` 函数：
+
+* 迁移脚本的名称应该具有一定的语义，以便在查看数据库的迁移历史时能够清晰地了解每个迁移脚本的作用。另外，以 `001`、`002` 等数字开头的命名方式是个好习惯，因为它可以帮助我们更清晰地了解迁移脚本的执行顺序。
+* 迁移脚本的 `up` 函数会在迁移时被调用，并且会接收一个 Kysely 实例作为参数，以便在其中执行迁移所需的数据库操作。
+
+此外，迁移脚本还接受一个可选的 `down` 函数，用于在需要回滚迁移时执行相应的操作。目前 `@fraqjs/plugin-kysely` 没有支持回滚迁移的计划。
+
+数据库是极其脆弱且重要的组件，错误的迁移脚本可能会导致数据丢失或损坏。因此，在编写和执行迁移脚本时务必小心谨慎，并且在生产环境中执行之前一定要在测试环境中充分测试。
+
+### 更改数据表结构 [#更改数据表结构]
+
+当插件升级并且数据表结构发生变化时，不要修改已经发布过的迁移脚本，而是追加新的迁移脚本。例如，如果我们在新版本中给 `PersonTable` 增加一个可空的 `nickname` 字段：
+
+```typescript
+export interface PersonTable {
+  id: Generated<number>;
+  first_name: string;
+  // 新增的字段应当尽量定义为可空
+  nickname: string | null;
+  gender: 'man' | 'woman' | 'other';
+  last_name: string | null;
+  created_at: ColumnType<string, string | undefined, never>;
+  metadata: JSONColumnType<{
+    login_at: string;
+    ip: string | null;
+    agent: string | null;
+    plan: 'free' | 'premium';
+  }>;
+}
+```
+
+对应的迁移注册应该保留原来的 `001_create_person_table`，并在它后面追加一个新的迁移：
+
+```typescript
+ctx.db.schemas.register({
+  name: 'my_plugin_schema',
+  migrations: {
+    // 上面已经发布过的 001_create_person_table 迁移脚本
+    '002_add_person_nickname': {
+      async up(kysely) {
+        await kysely.schema
+          .alterTable('my_plugin_person')
+          .addColumn('nickname', 'text')
+          .execute();
+      },
+    },
+  },
+});
+```
+
+`DatabaseService` 对迁移状态的记录完全基于你提供的脚本名。假设一个数据库已经执行过脚本 `001_create_person_table`，那么在插件更新后，`DatabaseService` 会从 `001` 的下一个脚本开始执行迁移；在这个例子中，它会执行 `002_add_person_nickname`。
+
+{/* prettier-ignore */}
+
+<Callout>
+  你可能会注意到 `up` 接受的 `kysely` 实例是 `Kysely<any>` 而非 `Kysely<FraqDatabase>`，但这正是迁移脚本所希望看到的类型。迁移脚本是 “frozen in time” 的，一旦创建后就不会变动，因此也不应该依赖于任何可能会随着时间变化的类型定义（例如 `FraqDatabase`），而应该使用一个通用的 `Kysely<any>` 类型，来确保迁移脚本不会因为类型变化而引发编译错误。
+
+  当然，这样做也有一个显而易见的弊端，那就是在迁移脚本中我们将失去类型安全的保障，因此在编写迁移脚本时需要格外小心，确保所有的表名、列名和数据类型都正确无误。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+{/* prettier-ignore */}
+
+<Callout type="error">
+  **永远不要修改已经发布过的迁移脚本**！如果需要更改数据库，请一定在之前的迁移脚本后面追加新的迁移脚本。修改已经发布过的迁移脚本会导致数据库迁移状态混乱，可能会导致数据丢失或损坏。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+## 操作数据表 [#操作数据表]
+
+完成表结构声明和迁移注册之后，`DatabaseService` 会在应用启动时自动完成迁移工作，随后就可以通过 `ctx.db.kysely` 来访问 Kysely 实例，并使用它来执行各种数据库操作了。下面介绍一些基本的 CRUD 操作，你可以查看 Kysely 文档的 [Examples](https://kysely.dev/docs/category/examples) 章节来了解更多用法。
+
+{/* prettier-ignore */}
+
+<Callout>
+  如果你的插件在数据库中定义了新的结构，同时又希望外界能够对这些数据进行查询或修改，不要直接暴露这些表，而应把这些操作封装成一个新的 `Service`，在其中使用 `ctx.db.kysely` 来访问数据库，并且使用 `provides` 属性和 `ctx.provide` 来提供这个服务。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+### 插入 (INSERT) 数据 [#插入-insert-数据]
+
+```typescript
+await ctx.db.kysely
+  .insertInto('my_plugin_person')
+  .values({
+    first_name: 'Alice',
+    nickname: null,
+    last_name: null,
+    gender: 'woman',
+    metadata: JSON.stringify({
+      login_at: new Date().toISOString(),
+      ip: null,
+      agent: null,
+      plan: 'free',
+    }),
+  })
+  .executeTakeFirst();
+```
+
+在上面的例子中，`id` 和 `created_at` 都不需要提供：`id` 是 `Generated<number>`，`created_at` 的插入类型是 `string | undefined`，并且迁移脚本已经为它设置了默认值；`metadata` 在 SQLite 中使用 `text` 列保存，因此插入时使用了 `JSON.stringify()`。如果你的插件希望在查询后直接得到对象，可以在业务服务中统一封装序列化和反序列化逻辑。
+
+### 查询 (SELECT) 数据 [#查询-select-数据]
+
+```typescript
+const person = await ctx.db.kysely
+  .selectFrom('my_plugin_person')
+  .select(['id', 'first_name', 'nickname', 'last_name', 'gender', 'created_at'])
+  .where('first_name', '=', 'Alice')
+  .executeTakeFirst();
+
+if (person) {
+  console.log(person.id, person.first_name);
+}
+```
+
+如果你确定查询结果必须存在，可以使用 `executeTakeFirstOrThrow()`：
+
+```typescript
+const person = await ctx.db.kysely
+  .selectFrom('my_plugin_person')
+  .select(['id', 'first_name'])
+  .where('id', '=', 1)
+  .executeTakeFirstOrThrow();
+```
+
+### 更新 (UPDATE) 数据 [#更新-update-数据]
+
+```typescript
+await ctx.db.kysely
+  .updateTable('my_plugin_person')
+  .set({
+    nickname: 'Ali',
+    last_name: 'Liddell',
+  })
+  .where('id', '=', 1)
+  .executeTakeFirst();
+```
+
+`PersonTable` 中的 `created_at` 被声明为 `ColumnType<string, string | undefined, never>`，因此 TypeScript 会阻止你在更新时修改它。
+
+### 删除 (DELETE) 数据 [#删除-delete-数据]
+
+```typescript
+await ctx.db.kysely
+  .deleteFrom('my_plugin_person')
+  .where('id', '=', 1)
+  .executeTakeFirst();
+```
+
+## 事务 (Transaction) [#事务-transaction]
+
+如果多个操作必须同时成功或同时失败，可以使用 Kysely 的事务（Transaction）功能：
+
+```typescript
+await ctx.db.kysely.transaction().execute(async (trx) => {
+  const result = await trx
+    .insertInto('my_plugin_person')
+    .values({
+      first_name: 'Bob',
+      nickname: null,
+      last_name: null,
+      gender: 'man',
+      metadata: JSON.stringify({
+        login_at: new Date().toISOString(),
+        ip: null,
+        agent: null,
+        plan: 'free',
+      }),
+    })
+    .executeTakeFirst();
+
+  console.log(result.insertId);
+});
+```
+
+
+# @fraqjs/plugin-random (/docs/plugins/random)
+
+
+
+<NpmBadge packageName="@fraqjs/plugin-random" />
+
+`@fraqjs/plugin-random` 提供了基于 [PCG32 算法](https://zh.wikipedia.org/wiki/%E7%BD%AE%E6%8D%A2%E5%90%8C%E4%BD%99%E7%94%9F%E6%88%90%E5%99%A8)的伪随机数生成器及其封装，适用于需要随机数的应用场景。
+
+## 安装与配置 [#安装与配置]
+
+将插件添加至 `dependencies`，然后在创建 `Context` 时引入并配置插件：
+
+```typescript
+import RandomPlugin from '@fraqjs/plugin-random';
+
+ctx.install(RandomPlugin, {
+  // 在这里传入 RandomPlugin 的配置选项
+});
+```
+
+`RandomPlugin` 有如下配置项：
+
+* `seed`：随机数生成器的全局种子，默认情况下会调用 `Math.random()` 来生成一个随机种子。
+* `sequence`：随机数生成器的全局序列，默认值为 1。
+
+有关上述配置项的详细信息，请参阅 PCG32 算法的相关文档。
+
+如果你是插件开发者，请将本插件添加到项目的 `peerDependencies` 中，并在自己的插件中声明依赖：
+
+```typescript
+import { RandomService } from '@fraqjs/plugin-random';
+
+definePlugin({
+  name: 'my-plugin',
+  inject: {
+    random: RandomService,
+  },
+  apply(ctx) {
+    // 使用 ctx.random 来访问 RandomService
+  },
+});
+```
+
+## 基本用法 [#基本用法]
+
+可以调用 `ctx.random` 来访问 `RandomService` 实例，并使用它来生成随机数和随机布尔值：
+
+```typescript
+ctx.random.uint32(); // 返回一个 [0, 2^32) 范围内的随机无符号整数
+ctx.random.float(); // 返回一个 [0, 1) 范围内的随机 32 位浮点数
+ctx.random.bool(0.1); // 以 10% 的概率返回 true，90% 的概率返回 false
+ctx.random.int(10); // 返回一个 [0, 10) 范围内的随机整数
+ctx.random.int(5, 15); // 返回一个 [5, 15) 范围内的随机整数
+ctx.random.range(5, 15); // 返回一个 [5, 15] 范围内的随机整数（闭区间）
+```
+
+## 集合操作 [#集合操作]
+
+`RandomService` 还提供了一些基于随机数生成的集合操作方法：
+
+```typescript
+ctx.random.pick(['Ras', 'Chiffon', 'Salt']);
+// 从数组中等概率随机选择一个元素
+
+ctx.random.shuffle(['Ras', 'Chiffon', 'Salt']);
+// 返回打乱顺序后的新数组，不修改原数组
+
+ctx.random.sample(['Ras', 'Chiffon', 'Salt', 'Milk', 'Shama', 'Otohime'], 2);
+// 从数组中随机选择 2 个元素，返回新数组
+```
+
+## 赋予权重 [#赋予权重]
+
+`RandomService` 的方法还支持为元素赋予权重，以实现非均匀的随机选择：
+
+```typescript
+ctx.random.weightedIndex([1, 3, 5]);
+// 根据权重返回一个索引，0 的概率为 1/9，1 的概率为 3/9，2 的概率为 5/9
+
+const weights = {
+  Ras: 1,
+  Chiffon: 3,
+  Salt: 5,
+};
+const elem = ctx.random.weightedPick(
+  Object.keys(weights),
+  (item) => weights[item],
+);
+// 根据权重随机选择一个元素，Ras 的概率为 1/9，Chiffon 的概率为 3/9，Salt 的概率为 5/9
+```
+
+## 状态管理 [#状态管理]
+
+`RandomService` 支持导出和导入状态，或直接克隆一个新的实例，这对于需要在不同上下文中保持随机数生成器状态一致的场景非常有用：
+
+```typescript
+const state = ctx.random.exportState();
+const newRandom = RandomService.fromState(state);
+// OR:
+const newRandom = ctx.random.clone();
+```
+
+此外，也可以直接通过给定的 `seed` 和 `sequence` 来创建一个新的 `RandomService` 实例：
+
+```typescript
+const newRandom = new RandomService({ seed: 12345, sequence: 67890 });
+```
+
+
+# @fraqjs/plugin-takumi (/docs/plugins/takumi)
+
+
+
+<NpmBadge packageName="@fraqjs/plugin-takumi" />
+
+`@fraqjs/plugin-takumi` 提供了基于 [Takumi](https://takumi.kane.tw/) 的图片渲染服务。
+
+{/* prettier-ignore */}
+
+<Callout type="warning">
+  `@fraqjs/plugin-takumi` 依赖 `@takumi-rs/core` 包。Takumi 是一个 Rust 项目，只支持如下平台：
+
+  * Windows x64/arm64
+  * macOS x64/arm64
+  * Linux x64/arm64
+</Callout>
+
+{/* prettier-ignore-end */}
+
+## 安装与配置 [#安装与配置]
+
+将插件添加至 `dependencies`，然后在创建 `Context` 时引入并配置插件：
+
+```typescript
+import TakumiPlugin from '@fraqjs/plugin-takumi';
+
+ctx.install(TakumiPlugin, {
+  // 在这里传入 TakumiPlugin 的配置选项
+});
+```
+
+`TakumiPlugin` 有如下配置项：
+
+* `renderer`：传递给 Takumi 渲染器（`Renderer`）的选项，包含如下字段：
+  * `persistentImages`：预先加载的图像。
+  * `fonts` 和 `loadDefaultFonts`：通常情况下无需设置，Fraq 会自动加载内置字体，详见后续部分。
+* `onFontRegisterConflict`：当注册字体时发生冲突（即尝试注册一个已存在的字体名称）时的处理方法，可选值有：
+  * `error`：抛出错误。
+  * `warn-and-ignore`：发出警告并忽略新的注册，这是默认行为。
+  * `warn-and-replace`：发出警告并替换已存在的字体。
+* `loadBuiltinFonts`：是否加载 Fraq 提供的内置字体，默认为 `true`。
+
+如果你是插件开发者，请将本插件添加到项目的 `peerDependencies` 中，并在自己的插件中声明依赖：
+
+```typescript
+import { TakumiService } from '@fraqjs/plugin-takumi';
+
+definePlugin({
+  name: 'my-plugin',
+  inject: {
+    takumi: TakumiService,
+  },
+  apply(ctx) {
+    // 使用 ctx.takumi 来访问 TakumiService
+  },
+});
+```
+
+此外，为了在编写插件的过程中使用 JSX 语法，你需要：
+
+* 将 `react` 添加为 `peerDependencies`；
+* 将 `@types/react` 添加为 `devDependencies`；
+* 在 `tsconfig.json` 中将 `jsx` 选项设置为 `react-jsx`；
+* 使用 `.tsx` 而非 `.ts` 作为扩展名。
+
+## 渲染 JSX 与 HTML [#渲染-jsx-与-html]
+
+`TakumiService` 提供了 `renderJsx` 和 `renderHtml` 方法，分别用于渲染 JSX 和 HTML：
+
+```tsx
+const img = await ctx.takumi.renderJsx(
+  <div tw="p-4 bg-gray-100 rounded">Hello, Takumi!</div>,
+);
+// img: Buffer<ArrayBufferLike>
+
+const img2 = await ctx.takumi.renderHtml(`
+<div style="padding: 16px; background-color: #f3f4f6; border-radius: 8px;">
+  Hello, Takumi!
+</div>
+`);
+```
+
+在使用 `renderJsx` 时，可以使用 Tailwind CSS 的语法来快速设置样式，例如 `tw="p-4 bg-gray-100 rounded"`；当然，也可以使用 `style` 属性来直接设置样式。Takumi 支持的样式列表见 [“Reference“ 章节](https://takumi.kane.tw/docs/reference#style-properties)。
+
+`renderJsx` 和 `renderHtml` 都接受三个参数。第一个参数是需要渲染的内容，后两个参数分别是传递给 `Renderer` 的渲染选项和可选的 `AbortSignal`。
+
+## 使用字体 [#使用字体]
+
+`@fraqjs/plugin-takumi` 内置了多种字体：
+
+* `Inter`：开源的无衬线西文字体。
+* `Roboto Mono`：开源的等宽西文字体。
+* `Noto Sans SC`：开源的无衬线简体中文字体。
+
+上述字体均使用 SIL Open Font License 1.1 协议发布，`@fraqjs/plugin-takumi` 在发布的 npm 包中包含了上述字体的完整 TTF 文件以及 `OFL.txt` 许可证文件。
+
+{/* prettier-ignore */}
+
+<Callout>
+  由于包含了静态资源，`@fraqjs/plugin-takumi` 的包体积较大（约 20MB），但我们认为这是合理并且可以接受的，主要原因有：
+
+  * 对于机器人的部署环境来说，几十 MB 的体积通常是可以接受的；
+  * 这些字体文件的体积是无法通过代码优化来减少的；
+  * 直接包含字体文件可以确保在任何环境下都能获得一致的渲染效果，而无需担心字体文件的加载问题。
+</Callout>
+
+{/* prettier-ignore-end */}
+
+你可以在 JSX 的 `style` 属性中直接使用上述字体：
+
+```tsx
+// 中文字体使用 Noto Sans SC，英文和数字使用 Inter
+const img = await ctx.takumi.renderJsx(
+  <div style={{ fontFamily: 'Inter, Noto Sans SC' }}>你好，T4kum1!</div>,
+);
+```
+
+此外，也可以在插件加载阶段使用 `ctx.takumi.registerFontFamily` 来注册自定义字体，在注册时需要提供完整的字体数据，例如从 TTF 文件中读取或从网络获取。
+
+## Emoji 支持 [#emoji-支持]
+
+`TakumiService` 还提供了 `renderJsxWithEmoji` 和 `renderHtmlWithEmoji` 方法，用于渲染包含 Emoji 的内容。这两个方法与 `renderJsx` 和 `renderHtml` 相比，在末尾多了一个 `emojiType: EmojiType` 参数，用于指定使用哪种 Emoji 风格。
+
+```typescript
+type EmojiType =
+  | 'twemoji'
+  | 'blobmoji'
+  | 'noto' // 默认值
+  | 'openmoji'
+  | 'fluent'
+  | 'fluentFlat';
+```
+
+为了保持与 Noto Sans SC 字体的风格一致，`renderJsxWithEmoji` 和 `renderHtmlWithEmoji` 默认使用 `noto` 作为 Emoji 风格。
+
+## 使用 `takumi-preview` [#使用-takumi-preview]
+
+<NpmBadge packageName="@fraqjs/takumi-preview" />
+
+Fraq 提供了一个名为 `@fraqjs/takumi-preview` 的工具包，用于在开发过程中预览 Takumi 渲染的效果。你可以将其作为开发依赖安装：
+
+```bash
+npm install -D @fraqjs/takumi-preview
+# or
+yarn add -D @fraqjs/takumi-preview
+# or
+pnpm add -D @fraqjs/takumi-preview
+```
+
+为了使用 `takumi-preview`，你需要将你的卡片模板用 `export default` 导出，并且在同一个文件里用 `previewProps` 导出一个对象，指定预览时传递给模板的 props：
+
+```tsx
+// src/templates/MyCard.tsx
+export interface MyCardProps {
+  greetingName: string;
+}
+
+export default function MyCard({ greetingName }: MyCardProps) {
+  return (
+    <div style={{ fontFamily: 'Inter, Noto Sans SC' }}>
+      你好, {greetingName}!
+    </div>
+  );
+}
+
+export const previewProps: MyCardProps = {
+  greetingName: 'T4kum1',
+};
+```
+
+随后，你可以在命令行中运行 `takumi-preview` 来预览渲染效果：
+
+```bash
+npx takumi-preview src/templates/MyCard.tsx
+```
+
+`takumi-preview` 会启动一个 HTTP 服务器，你可以在浏览器中访问终端提示的地址（默认为 `http://127.0.0.1:4649/`）来查看渲染结果。每当你修改了模板文件并保存后，预览页面会自动刷新以显示最新的渲染效果。
+
+预览工具默认使用的渲染选项为 `{ devicePixelRatio: 1.5 }`。你可以通过在模板文件中导出一个名为 `previewRendererOptions` 的对象来覆盖默认选项：
+
+```ts
+import type { RenderOptions } from '@takumi-rs/core';
+
+export const previewRendererOptions: RenderOptions = {
+  width: 800,
+  height: 600,
+  devicePixelRatio: 1,
+};
+```
+
+此外，还可以导出如下的变量或函数：
+
+* `previewUseEmoji`：默认为 `false`，如果设置为 `true`，则预览时会使用 `renderJsxWithEmoji` 来渲染模板。
+* `previewEmojiType`：默认为 `'noto'`，当 `previewUseEmoji` 为 `true` 时，用于指定 Emoji 风格。
+* `previewSetup`：一个可选的异步函数，类型为 `(service: TakumiService) => void | Promise<void>`，在预览渲染之前执行，可以在这里对渲染用到的 `TakumiService` 实例进行一些额外的配置，例如注册字体或预加载图像资源等。
+
+## 加载图像 [#加载图像]
+
+出于内容安全的考虑，Takumi 不允许直接从网络加载图像资源。需要渲染图像时，你需要通过 `resourcesOptions.cache` 参数来提供一个 `Map<string, ArrayBuffer>` 实例，Takumi 会从这个 Map 中查找所需的图像资源。
+
+```tsx
+const cache = new Map<string, ArrayBuffer>();
+// cache.set('https://example.com/image.png', arrayBufferOfImage);
+
+const img = await ctx.takumi.renderJsx(
+  <img src="https://example.com/image.png" alt="Example" />,
+  {
+    resourcesOptions: {
+      cache,
+    },
+  },
+);
+```
+
+此外，对于一些常用资源，例如 Logo 图标等，你也可以选择将它们预先加载到 `renderer` 的 `persistentImages` 选项中。
+
+
+# 上下文 (Context) (/docs/development/digging/context)
+
+
+
+在此前的例子中，我们已经了解了 `Context` 的许多用法：
+
+* `ctx.router` 是一个 `Router` 实例，用于定义指令、进行模式匹配等。
+* `ctx.client` 是一个 `MilkyClient` 实例，用于调用 Milky 的 API。
+* `ctx.logger` 是一个 `Logger` 实例，用于记录日志。
+* `ctx.on` 用于监听事件，例如 `message_receive`、`message_recall` 等，并返回一个注销监听器的函数。
+* `ctx.install` 用于安装插件。
+* `ctx.provide` 和 `ctx.resolve` 用于提供和解析服务。
+* `ctx.start` 用于启动机器人。
+
+正如一开始所提到的，`Context` 是 Fraq 的核心类，代表了一个机器人实例。它包含了机器人的配置、状态、路由等信息。我们通过调用 `ctx` 的各种方法来 “组装” 这个机器人，例如定义指令、安装插件、提供服务等。最后，我们调用 `ctx.start` 来启动这个机器人，使其开始监听用户输入并响应。
+
+## 创建 Context [#创建-context]
+
+最常见的方式是通过 Milky 协议端的地址创建 `Context`：
+
+```typescript
+const ctx = Context.fromUrl('http://localhost:30001', {
+  accessToken: '<如果你的 Milky 协议端配置了 token，请在这里添加>',
+});
+```
+
+如果你需要接入自定义协议客户端（例如 Mock Client），可以直接传入一个实现了 `MilkyClient` 接口的对象：
+
+```typescript
+const ctx = Context.fromClient(client);
+```
+
+这种方式只要求客户端提供 Milky API 调用能力和事件流入口，具体通信方式可以由客户端自行决定。
+
+## 设定计时任务 [#设定计时任务]
+
+`Context` 提供了 `timeout` 和 `interval` 方法来设定计时任务，例如：
+
+```typescript
+ctx.timeout(() => {
+  console.log('这是一个一次性计时器，3 秒后触发');
+}, 3000);
+
+ctx.interval(() => {
+  console.log('这是一个循环计时器，每 2 秒触发一次');
+}, 2000);
+```
+
+这两个方法与 JavaScript 中的 `setTimeout` 和 `setInterval` 类似，都会返回 `NodeJS.Timeout` 对象。你可以通过 `clearTimeout` 和 `clearInterval` 来取消这些计时任务，这些任务也会在 `Context` 停止时自动被清除。
+
+## 继承与隔离 [#继承与隔离]
+
+我们可以通过 `ctx.fork` 来创建一个继承当前 `ctx` 的新 `Context` 实例。这个新实例会与父 `Context` 使用同一个协议客户端，并且可以访问父 `Context` 提供的服务；但在新创建出的这个 `Context` 上进行配置、定义路由以及安装插件等操作不会影响到父 `Context`。我们结合上一节的依赖注入来看看这个特性：
+
+```typescript
+const PluginA = definePlugin({
+  name: 'plugin-a',
+  provides: [AlphaService],
+  apply(ctx) {
+    ctx.provide(AlphaService, new AlphaService());
+  },
+});
+
+const PluginB = definePlugin({
+  name: 'plugin-b',
+  requires: [AlphaService],
+  apply(ctx) {
+    const alphaService = ctx.resolve(AlphaService);
+    console.log(alphaService.alpha());
+  },
+});
+
+const fork1 = ctx.fork('fork1');
+fork1.install(PluginA);
+
+const fork2 = ctx.fork('fork2');
+fork2.install(PluginB);
+
+ctx.start();
+```
+
+这段代码会**抛出错误**，因为 `PluginB` 依赖了 `AlphaService`，但是 `AlphaService` 是在 `fork1` 上提供的，而 `fork2` 无法访问 `fork1` 上提供的服务。
+
+乍一看，这个特性似乎限制了我们在不同的 `Context` 之间共享服务，但实际上它提供了更大的灵活性。我们看下面一个例子：
+
+```typescript
+class OmegaService {
+  constructor(public name: string) {}
+  omega() {
+    return `omega ${this.name}`;
+  }
+}
+
+const pluginX = definePlugin({
+  name: 'plugin-x',
+  provides: [OmegaService],
+  apply(ctx, omegaName: string) {
+    ctx.provide(OmegaService, new OmegaService(omegaName));
+  },
+});
+
+const pluginY = definePlugin({
+  name: 'plugin-y',
+  requires: [OmegaService],
+  apply(ctx) {
+    const omegaService = ctx.resolve(OmegaService);
+    console.log(omegaService.omega());
+  },
+});
+
+const fork1 = ctx.fork('fork1');
+fork1.install(pluginX, 'fork one');
+fork1.install(pluginY);
+
+const fork2 = ctx.fork('fork2');
+fork2.install(pluginX, 'fork two');
+fork2.install(pluginY);
+
+ctx.start();
+```
+
+在这个例子中，我们在两个不同的 fork 上提供了不同配置的 `OmegaService`，并且在同一个 fork 上安装了依赖于 `OmegaService` 的 `pluginY`。当我们运行这段代码时，输出将会是：
+
+```
+omega fork one
+omega fork two
+```
+
+此外，在父 `Context` 上提供的服务是可以被所有子 `Context` 访问的，并且如果在新的 `Context` 上提供了一个与父 `Context` 上同类型的服务，那么在这个新的 `Context` 上解析这个服务时会优先返回新的服务实例，而不是父 `Context` 上的服务实例。我们仍然以上面的 `OmegaService` 为例：
+
+```typescript
+ctx.install(pluginX, 'parent context');
+const fork1 = ctx.fork('fork1');
+fork1.install(pluginX, 'fork one');
+fork1.install(pluginY);
+ctx.start();
+```
+
+这段代码的输出将会是 `omega fork one`，而不是 `omega parent context`，因为在 `fork1` 上提供了一个新的 `OmegaService` 实例，它会覆盖掉父 `Context` 上的实例。
+
+总之，`Context` 的继承与隔离特性使得我们可以在不同的 `Context` 上提供不同配置的服务，并且保证了这些服务之间不会互相干扰。这对于构建复杂的机器人应用非常有用。
+
+## 事件过滤 [#事件过滤]
+
+`ctx.fork` 支持传入一个 `Filter` 对象来过滤事件，例如：
+
+```typescript
+ctx.fork('fork1', {
+  message_receive: ({ data }) =>
+    data.message_scene === 'group' && data.peer_id === 123456,
+  message_recall: ({ data }) =>
+    data.message_scene === 'group' && data.peer_id === 123456,
+});
+```
+
+在这个例子中，我们创建了一个新的 `Context`，并且只让它监听来自群聊 `123456` 的消息接收和消息撤回事件。`Filter` 对象的每个属性都是一个函数，这些函数会在对应事件发生时被调用，只有当函数返回 `true` 时，事件才会被传递给这个新的 `Context`。而对于没有在 `Filter` 对象中指定过滤函数的事件，则默认会被拦截，不会传递给这个新的 `Context`。
+
+Fraq 提供了一个 `filter` 命名空间来提供一些预设的过滤函数，例如：
+
+```typescript
+import { filter } from '@fraqjs/fraq';
+
+const filter1 = filter.group(123456, 654321);
+// 监听来自群聊 123456 和 654321 的事件，包括：
+// - message_receive
+// - message_recall
+// - group_join_request
+// - ...
+// 等所有与消息和群聊相关的事件。
+
+const filter2 = filter.friend(10001, 10002);
+// 监听来自好友 10001 和 10002 的事件，包括：
+// - message_receive
+// - message_recall
+// - friend_nudge
+// - ...
+// 等所有与消息和好友相关的事件。
+
+const filter3 = filter.or(filter.group(123456), filter.friend(10001));
+// 监听来自群聊 123456 和好友 10001 的事件。
+
+const filter4 = filter.and(filter.group(123456), filter.admin());
+// 监听来自群聊 123456 的管理员的消息事件。
+
+const filter5 = filter.and(
+  filter.allGroups(),
+  filter.not(filter.group(123456)),
+);
+// 监听来自群聊但不包括群聊 123456 的事件。
+```
+
+随后，就可以将这些过滤器传入 `ctx.fork` 来创建新的 `Context`，例如：
+
+```typescript
+ctx.fork('fork1', filter1).install(pluginA); // pluginA 只会监听来自群聊 123456 和 654321 的事件
+ctx.fork('fork2', filter4).install(pluginB); // pluginB 只会监听来自群聊 123456 的管理员的消息事件
+ctx.start();
+```
+
+## 停止 `Context` [#停止-context]
+
+调用 `ctx.stop` 方法可以停止 `Context`，此后 `Context` 将不再响应任何事件，也无法调用 Milky API。`Context` 在调用 `stop` 后无法再次启动。`stop` 的流程是：
+
+1. 停止 `Context` 内部通过 `timeout` 和 `interval` 创建的所有计时任务。
+2. 停止根事件流，例如断开 WebSocket 连接，禁止后续的事件进入 `Context`。
+3. 按照 `fork` 的顺序反向调用所有子 `Context` 的 `stop` 方法，停止所有子 `Context`。子 `Context` 的 `stop` 方法会按照同样的流程停止它的子 `Context`，并且按照 `provide` 的顺序反向调用自身（子 `Context`）注册的所有服务的 `dispose` 方法（如果服务实现了 `Disposable` 接口），释放所有服务。
+4. 按照 `provide` 的顺序反向调用自身（根 `Context`）注册的所有服务的 `dispose` 方法。
+
+假如我们有这样的 `Context` 结构：
+
+```
+root
+  pluginA (provides ServiceA)
+  pluginB (provides ServiceB)
+  fork1 (filter: group 123456)
+    pluginC (provides ServiceC)
+    fork1-1
+      pluginD (provides ServiceD)
+  fork2
+    pluginE (provides ServiceE)
+```
+
+那么停止的顺序会是：
+
+```
+stop event flow [root]
+stop event flow [fork1]
+stop event flow [fork1-1]
+dispose [ServiceD]
+dispose [ServiceC]
+stop event flow [fork2]
+dispose [ServiceE]
+dispose [ServiceB]
+dispose [ServiceA]
+```
+
+在调用各个 `dispose` 方法时，Fraq 会捕获并记录任何可能发生的错误，并继续调用下一个 `dispose` 方法，而不会因为某个服务的 `dispose` 方法抛出错误而中断整个停止流程。如果有多个 `dispose` 方法抛出错误，Fraq 会把它们包装成一个 [`AggregateError`](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/AggregateError) 来抛出。
+
+## 触发规则 [#触发规则]
+
+了解了如何创建新的 `Context` 之后，我们接下来重新从头看一下事件进入 `Context` 之后会发生什么。当协议端向 Fraq 推送事件时，`Context` 会接收这个事件，并触发通过 `ctx.on` 注册的事件监听器。对于 `message_receive` 事件，`Context` 还会把消息交给自己的 `router`，尝试匹配已经定义好的指令和模式。在同一个 `router` 中，Fraq 会按照指令和模式的定义顺序依次尝试匹配，详细的匹配规则可以参考[命令路由 (Router)](./router.mdx) 中的介绍。
+
+如果通过 `ctx.fork` 创建了新的 `Context`，父 `Context` 接收到的事件会按照新 `Context` 上配置的过滤器继续传递下去。每个 `Context` 都有自己独立的 `router`，因此同一条消息可能会被多个满足过滤条件的 `Context` 分别处理；而在每个 `Context` 内部，指令仍然遵循上面提到的顺序匹配规则。
+
+
+# 命令路由 (Router) (/docs/development/digging/router)
+
+
+
+在此前的例子中，我们已经多次使用过 `ctx.router`：
+
+* `ctx.router.command` 用于定义一个带名称的指令。
+* `ctx.router.rawPattern` 用于直接从用户输入开头进行模式匹配。
+* `ctx.router.group` 用于定义指令组和子指令 / 模式。
+* `ctx.router.filter` 用于让一组路由只在特定会话条件下生效。
+
+这些方法最终都在做同一件事：向当前 `Router` 中添加一条路由规则。当 `Context` 收到 `message_receive` 事件时，它会把消息交给自己的 `router`，由 `router` 按照定义顺序寻找第一个完整匹配的分支，并调用这个分支对应的处理函数。
+
+## 一切消息皆 token [#一切消息皆-token]
+
+要了解 `Router` 的工作原理，首先要引入 token 的概念。在 `Context` 调用 `router.dispatch` 之后，`Router` 会将消息传入一个分词器（Tokenizer），然后对消息进行流式读取。分词器会将消息按照 token 的顺序进行读取；分词器也支持回退，`Router` 只要在路由时记录当前的位置，就可以在后续 token 不匹配时回退到这个位置继续尝试其他分支。
+
+token 分两大类：文本 token 和消息段 token。Router 在遇到文本（text）消息段时，会寻找第一个非空字符作为 token 的起始位置，然后把从这个位置开始的连续非空字符作为一个文本 token；在遇到其他类型的消息段时，会把整个消息段作为一个消息段 token。
+
+此外，分词器还支持两种特殊的读取模式：
+
+* greedy 模式，要求当前位置是文本消息段，它会跳过当前位置前面的空格，然后把当前文本消息段中的剩余文本作为一个字符串读取；它不会跨过后续消息段。
+* catch-all 模式，会从当前位置开始读取所有剩余文本和非文本消息段，并返回一个消息段数组；由于它会消费全部剩余内容，`param.catchAll()` 只能作为模式中的最后一个参数注册。
+
+## 路由规则 [#路由规则]
+
+正如上面所说，路由规则分如下四大类：
+
+* `command`：先按照指令名称匹配一个 token，再按照给定的参数模式匹配后续 token。
+* `rawPattern`：直接从开头按照给定的参数模式匹配 token。
+* `group`：先按照指令名称匹配一个 token，再按照给定的子路由规则匹配后续 token。
+* `filter`：先按照给定的过滤函数判断当前会话是否满足条件，再按照给定的子路由规则匹配消息。
+
+`Router` 会按照定义的顺序依次尝试这些规则，直到找到一个完整匹配（即匹配到 Pattern 的最后一个元素时恰好到消息末尾）的规则为止。如果某个规则的指令名称匹配但参数不匹配，或者在匹配完 Pattern 之后消息中还剩下没有被消费的 token，`Router` 会继续尝试后面的规则。
+
+假设我们定义了如下路由规则：
+
+```
+[command] hello <name: string> <age: number>
+[rawPattern] <reference: reply segment> <fetch: literal('fetch')>
+[filter] (session) => session.raw.sender_id === 10001
+  [command] secret
+[group] teleport
+  [rawPattern] <location: string> <delay: number>
+  [rawPattern] <location: string>
+  [command] home
+```
+
+对于某个 ID 为 10001 的用户输入 `teleport LocationA`，`Router` 会进行如下尝试：
+
+* `[command] hello <name: string> <age: number>`：第一个 token `teleport` 与 `hello` 不匹配，尝试失败。
+* `[rawPattern] <reference: reply segment> <fetch: literal('fetch')>`：第一个 token `teleport` 不是 `reply` 消息段，尝试失败。
+* `[filter] (session) => session.raw.sender_id === 10001`：过滤函数返回 `true`，继续尝试子规则。
+  * `[command] secret`：第一个 token `teleport` 与 `secret` 不匹配，尝试失败。
+* `[group] teleport`：第一个 token `teleport` 与 `teleport` 匹配，**消费一个 token**，继续尝试子规则。
+  * `[rawPattern] <location: string> <delay: number>`：第二个 token `LocationA` 与 `<location: string>` 匹配，继续尝试后续 token，但消息中没有更多 token 了，尝试失败。
+  * `[rawPattern] <location: string>`：第二个 token `LocationA` 与 `<location: string>` 匹配，且消息中没有更多 token 了，尝试成功，调用对应的处理函数，后续的规则不再尝试。
+
+## 白盒函数 [#白盒函数]
+
+`Router` 对于命令处理而言是一个黑盒，但对于插件开发者而言，有时我们需要获取一些路由规则的信息，因此 `Router` 提供了下面的白盒函数：
+
+* `router.routes`：返回当前 `Router` 中定义的所有路由规则的名称、参数和处理函数，但不包括 `group` 和 `filter` 规则下的子规则。
+* `router.branches`：输入一个 `Session`，返回这个 `Session` 有可能触发的所有 `command` 和 `rawPattern` 规则的名称、参数和处理函数，包括 `group` 和 `filter` 规则下的规则。这个函数不会尝试进行模式匹配，只在过滤函数不满足条件时排除掉对应的规则分支。
+* `router.match`：输入一个 `Session` 和消息，尝试对消息内容进行匹配**但不触发处理函数**，返回匹配到的第一条 `command` 或 `rawPattern` 规则的名称、参数和处理函数。如果没有匹配到任何规则，则返回 `undefined`。

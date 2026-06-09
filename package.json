@@ -1,0 +1,27 @@
+{
+  "name": "keke",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Keke the DiHuang Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "tsx src/index.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@11.5.2",
+  "dependencies": {
+    "@fraqjs/color-log": "^0.2.0",
+    "@fraqjs/fraq": "^0.8.2",
+    "@fraqjs/plugin-kysely": "^0.1.2",
+    "@fraqjs/plugin-random": "^0.1.2",
+    "@fraqjs/plugin-takumi": "^0.1.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.16",
+    "@types/node": "^25.9.2",
+    "tsx": "^4.22.3",
+    "typescript": "^6.0.3"
+  }
+}

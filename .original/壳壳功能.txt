@@ -1,0 +1,1215 @@
+&&<配置>兼容模式:是
+
+[总处理]
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+如果:$读 开关/%群号%/开关机 a 0$==0
+返回
+如果尾
+如果:$读 开关/%群号%/功能系统 a 0$==0
+返回
+如果尾
+$常调 %参数-1%$
+
+顶球@.*
+±img=https://api.xingzhige.com/API/dingqiu/?qq=%AT0%±
+
+创建词库
+如果:$读 开关/创建词库 %QQ% 0$==1
+你已经创建过词库啦
+返回
+如果尾
+$写 开关/创建词库 %QQ% 1$
+1:%
+2:$
+$写文件 /storage/emulated/0/QR/QRDic/%QQ%.txt &&<配置>兼容模式:是\n\n[总处理]\n如果:%1%QQ%1%==%QQ%\n%2%常调\%20%1%参数-1%1%%2%\n\n%括号1%$
+$词库操作 添加 %QQ%.txt$
+成功创建词库！\n
+注意:词库只能自己使用，其他人不可以哦~
+
+
+
+
+导入词库 ?([\s\S]*)
+如果:%QQ%==1966872502|%QQ%==479571968
+你给我滚出去
+返回
+如果尾
+如果:$读 开关/创建词库 %QQ% 0$==0
+你还没有创建词库哦，请说"创建词库"
+返回
+如果尾
+如果:$字符长度 %括号1%$>50
+一次导入的词库内容不能超过50个字符！
+返回
+如果尾
+a:$替换 𒑜 %括号1%𒑜$/𒑜***$
+b:$替换 𒑜 %a%𒑜$𒑜***$
+c:$读文件 /storage/emulated/0/QR/QRDic/%QQ%.txt$
+$写文件 /storage/emulated/0/QR/QRDic/%QQ%.txt %c%\n\n%括号1%$
+导入成功！
+
+清空词库|删除词库
+如果:$读 开关/创建词库 %QQ% 0$==0
+你还没有创建过词库哦
+返回
+如果尾
+$写 开关/创建词库 %QQ% 0$
+$词库操作 删除 %QQ%.txt$
+$删除 /storage/emulated/0/QR/QRDic/%QQ%.txt$
+ok
+
+自定义词库 ?([\s\S]*)
+如果:%群号%!=868989117
+你无权使用
+返回
+如果尾
+a:$读文件 /storage/emulated/0/QR/QRDic/同学群特供.txt$
+$写文件 /storage/emulated/0/QR/QRDic/同学群特供.txt %a%\n\n%括号1%$
+ok
+
+
+
+导入功能词库 ?([\s\S]*)
+如果:%QQ%!=2958925805
+你无权使用
+返回
+如果尾
+a:$读文件 /storage/emulated/0/QR/QRDic/壳壳功能.qr$
+$写文件 /storage/emulated/0/QR/QRDic/壳壳功能.qr %a%\n\n%括号1%$
+ok
+
+涩图
+$访问 https://sex.nyan.xyz/api/v2/img$
+
+嗷嗷
+$访问 http://200814.xyz:8000/dhmpg$
+
+涩图
+如果:%群号%==647960688
+a:$访问 https://sex.nyan.xyz/api/v2/?type=json$
+a:@a[data]
+a:$取中间 𒑜 %a%𒑜url":"𒑜"$
+±img=%a%±
+返回
+如果尾
+
+人设生成 ?(.*)
+$访问 http://jiuli.xiaoapi.cn/i/web/renshe_generate.php?sx=1&name=%括号1%$
+
+
+[https://sex.nyan.xyz/api/v2/img?type=json&r18=true]
+
+色色
+如果:%QQ%==1453973332
+a:$访问 https://sex.nyan.xyz/api/v2/?type=json&r18=false$
+a:@a[data]
+a:$取中间 𒑜 %a%𒑜url":"𒑜"$
+±img=%a%±
+返回
+如果尾
+
+
+
+
+
+
+@.* 昵称|@.* 名
+$群昵称 %群号% %AT0%$
+
+@.* 真实昵称|@.* 本名
+$群昵称 0 %AT0%$
+
+[群].*/msg-cut/.*
+如果:%主人%==%QQ%
+$撤回 %群% %Msgbar0%$
+返回
+如果尾
+如果:%群号%==292629548
+你无权在此群使用本功能！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+$撤回 %群% %Msgbar0%$
+返回
+如果尾
+
+
+
+
+
+
+更新日志
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+如果:$读 开关/%群号%/开关机 a 0$==0
+返回
+如果尾
+自2022年6月28日开始记录\n
+在此之前已经到了1.2版本\n
+6.29日上午-1.3版本\n
+更新了黑名系统，聊天也受开关机限制，模拟股市功能\n
+6.29日16:40-1.3.1版本\n
+略微提高了钓鱼的概率，可以起竿的概率由33.33％调至50％，钓到一条黄鱼的概率由7.14％调至13.3％\n
+7.1日-1.3.2版本\n
+增加了护盾，开关系统
+7.4日-1.3.3版本\n
+增加了排行榜功能，修复了今日老婆与今时老婆的bug\n
+7.6日-1.3.4版本\n
+增加战争系统部分指令，优化功能系统\n
+7.8日-1.3.5版本\n
+增加今秒老婆(小主人功能)，今时老婆改为一小时一次(前是一分钟一次)
+
+群状态
+如果:%QQ%==%主人%
+A:$获取群列表$
+B:0
+:循环
+如果:@A[%B%]==
+$发送$
+返回
+如果尾
+C:@A[%B%]
+$获取群状态 %C%$ %C%\n
+B:[%B%+1]
+$jump :循环$
+返回
+如果尾
+
+撤回 ?([0-9]+)
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+如果:$读 开关/%群号%/开关机 a 0$==0
+返回
+如果尾
+如果:%括号1%>10
+一次性最多只能撤回10条！
+返回
+如果尾
+如果:%QQ%==%主人%
+$写 %群号%/撤回冷却 a %Time%$
+数:0
+:跳
+如果:%数%<%括号1%
+$撤回 %群号% [%Msgbar%-%数%]$
+数:[%数%+1]
+$跳 :跳$
+返回
+如果尾
+已撤回%数%消息
+返回
+如果尾
+如果:%群号%==292629548
+你无权在此群使用本功能！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+$写 %群号%/撤回冷却 a %Time%$
+数:0
+:跳
+如果:%数%<%括号1%
+$撤回 %群号% [%Msgbar%-%数%]$
+数:[%数%+1]
+$跳 :跳$
+返回
+如果尾
+已撤回%数%消息
+返回
+如果尾
+
+
+
+
+
+主人工具
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+如果:$读 开关/%群号%/开关机 a 0$==0
+返回
+如果尾
+@%昵称%\n
+时间\n
+上管理/下管理+@\n
+加群列表\n
+同意/忽略/拒绝加群\n
+群发+内容\n
+管理员相关\n
+QQ余额\n
+运行时间\n
+群活跃排行\n
+创建股市([\s\S]*)发行价([\d.]+)\n
+删除股市([\s\S]*)\n
+设置([\s\S]*)弧度([\d]+)%\n
+设置税收([\d]+)%\n
+开/关闪照破解\n
+
+
+时间
+%时间yyyy年MM月dd日 HH:mm:ss.SSS E%
+
+设置分割线 ?(.*)
+如果:%QQ%==%主人%
+$写 样式/分割线 %群号% %括号1%$
+@%昵称%\n
+成功设置分割线 %式%
+返回
+如果尾
+如果:%群号%==292629548|%群号%==1142724004|%群号%==887867000|%群号%==170467418
+你无权在此群使用本功能！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+$写 样式/分割线 %群号% %括号1%$
+@%昵称%\n
+成功设置分割线 %式%
+返回
+如果尾
+如果:$读 开关/%群号%/功能系统 a 0$==0
+系统已被关闭，无法使用
+返回
+如果尾
+
+
+$调用 1000 主页$
+
+主页
+json:{"app":"com.tencent.structmsg","config":{"ctime":1648540142,"forward":true,"token":"b5608f04157c6b5779d31ec52220f39a","type":"normal"},"desc":"新闻","extra":{"app_type":1,"appid":100951776,"msg_seq":7080425975834397292,"uin":2958925805},"meta":{"news":{"action":"","android_pkg_name":"","app_type":1,"appid":100951776,"ctime":1648540142,"desc":"我主人b站，鬼知道下面的qq音乐是啥","jumpUrl":"https://b23.tv/ci7b4Cg?share_medium=android&share_source=qq&bbid=XZ897988D9E881B7F98B050C4457317825051&ts=1648540128503","preview":"https://pic.ugcimg.cn/0e819649b6e9bab4c94aa58ab7af7ce2/jpg1","source_icon":"https://open.gtimg.cn/open/app_icon/00/95/17/76/100951776_100_m.png?t=1640166716","source_url":"","tag":"哔哩哔哩","title":"地荒的个人空间","uin":2958925805}},"prompt":"[分享]地荒的个人空间","ver":"0.0.0.1","view":"news"}
+
+
+
+
+
+
+
+
+补偿菜单
+由于一些原因导致壳壳停止服务的补偿领取界面\n
+鱼饵补偿领取(相当于官方群礼包，永久)\n
+-由于钓鱼bug导致的鱼饵丢失
+
+6月20补偿领取
+如果:%时间dd%>=22
+时间已经截止！
+返回
+如果尾
+如果:$读 壳壳/%群号%/补偿1 %QQ% 0$==1
+每人每群仅限领取一次！
+返回
+如果尾
+a:$读 壳壳/%群号%/小壳 0$
+$写 壳壳/%群号%/小壳 %QQ% [%a%+1000]$
+$写 壳壳/%群号%/补偿1 %QQ% 1$
+获得1000小壳补偿！
+返回
+如果尾
+
+鱼饵补偿领取
+如果:%群号%!=292629548
+仅限在官方群292629548领取！
+返回
+如果尾
+如果:$读 壳壳/%群号%/鱼饵补偿 %QQ% 0$==1
+每人每群仅限领取一次！
+返回
+如果尾
+饵:$读 壳壳/%群号%/鱼饵 %QQ% 0$
+$写 壳壳/%群号%/鱼饵 %QQ% [%饵%+5]$
+$写 壳壳/%群号%/鱼饵补偿 %QQ% 1$
+获得5鱼饵补偿！
+返回
+如果尾
+=
+
+(上管理|下管理)@.*
+如果:%QQ%==%主人%
+P:%Json%
+P:@P[pskey]
+P:@P[qun.qq.com]
+C:skey=%Skey%; p_skey=%P%; uin=o%Robot%; p_uin=o%Robot%;
+A:{"Connection":"keep-alive","Accept-Language":"zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2","User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:75.0) Gecko/20100101 Firefox/75.0","Referer":"https://qun.qq.com/member.html","Origin":"https://qun.qq.com","Cookie":"%C%"}
+B:$BKN %Skey%$
+如果:上管理==%括号1%
+A:$访问 SETPOST %A% https://qun.qq.com/cgi-bin/qun_mgr/set_group_admin gc=%群%&ul=%AT0%&op=1&bkn=%B%$
+恭喜@$群昵称 %群号% %AT0%$成为了本群新管理员
+返回
+如果尾
+如果:下管理==%括号1%
+A:$访问 SETPOST %A% https://qun.qq.com/cgi-bin/qun_mgr/set_group_admin gc=%群%&ul=%AT0%&op=0&bkn=%B%$
+很遗憾!$群昵称 %群号% %AT0%$被取消了管理员资格
+返回
+如果尾
+
+
+
+
+群发(.*)
+如果:%QQ%==%主人%
+A:$获取群列表$
+B:$JSON 长度 A$
+C:0
+:ABC
+如果:%C%!=%B%
+$调用 %随机数1-60000% @A[%C%]发送%括号1%$
+C:[%C%+1]
+$jump :ABC$
+返回
+如果尾
+发送完毕
+返回
+如果尾
+
+[内部](\d+)发送(.*)
+$发送 群 msg %括号1% %括号2%$
+
+
+
+
+
+
+群号
+%群号%
+
+复读 (.*)
+%括号1%
+
+
+
+我说了几个(.*)
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+如果:$读 开关/%群号%/开关机 a 0$==0
+返回
+如果尾
+如果:%括号1%==草|%括号1%==哈人|%括号1%==嗷嗷
+草:$读 群管/%括号1% %QQ% 0$
+你一共说的%括号1%的次数是 %草%\n
+从2023.7.11.22:00开始记录
+返回
+如果尾
+目前只有“草”，“哈人”，“嗷嗷”能被记录\n
+记录的是壳壳在线且在所有壳壳在线的群聊时你说的特定词语的次数
+
+
+
+
+本群总消息
+如果:%QQ%==%主人%
+%Msgbar%
+返回
+如果尾
+如果:%群号%==292629548
+你无权在本群使用！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+群成立以来所有成员的消息数：%Msgbar%
+返回
+如果尾
+成为小主人才能使用，请联系2958925805！
+
+运行时间(#)?
+T:[%NDTime%-%RobotRunTime%]
+T:[(%T%-%T%%1000)/1000]
+D:[(%T%-%T%%86400)/86400]
+T:[%T%-%D%*86400]
+H:[(%T%-%T%%3600)/3600]
+T:[%T%-%H%*3600]
+M:[(%T%-%T%%60)/60]
+S:[%T%-%M%*60]
+本机器人已经运行%D%天%H%时%M%分%S%秒了\n
+H:[%D%*24+%H%]
+M:[%H%*60+%M%]
+S:[%M%*60+%S%]
+总计 %H%小时 / %M%分钟
+±img=B00D2E52B4711B953F76D40381396BAA.jpg
+
+[内部]提醒
+±at %QQ%±@%昵称% 我直接提醒你
+
+([0-9]+)秒后提醒我(.*)
+@%昵称%\n
+好的，我将在%括号1%秒后提醒你%括号2%\n
+$调用 [%括号1%*1000] 提醒$
+
+
+
+刷屏检测
+开启刷屏检测\r
+关闭刷屏检测\r
+设置刷屏禁言 时间\r
+设置刷屏次数 数量\r
+设置刷屏提示 内容\r
+设置刷屏时间 时间
+$回调 中$
+
+开启刷屏检测
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+主人,我已帮您设置成功!
+$回调 中$
+$写 壳壳/群数据/%群号%/刷屏检测 m 已开$
+返回
+如果尾
+你不是我的主人，无权操作！
+$回调 中$
+
+关闭刷屏检测
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+主人,我已帮您设置成功!
+$回调 中$
+$写 壳壳/群数据/%群号%/刷屏检测 m 已关$
+返回
+如果尾
+你不是我的主人，无权操作！
+$回调 中$
+
+设置刷屏禁言 [0-9]+
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+主人,我已帮您设置成功!
+$回调 中$
+$写 壳壳/群数据/%群号%/刷屏禁言 m %参数1%$
+返回
+如果尾
+你不是我的主人，无权操作！
+$回调 中$
+
+设置刷屏次数 [0-9]+
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+主人,我已帮您设置成功！
+$回调 中$
+$写 壳壳/群数据/%群号%/刷屏次数 m %参数1%$
+返回
+如果尾
+你不是我的主人，无权操作！
+$回调 中$
+
+设置刷屏提示 .*
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+主人,我已帮您设置成功！
+$回调 中$
+$写 壳壳/群数据/%群号%/刷屏提示 m %参数1%$
+返回
+如果尾
+你不是我的主人，无权操作！
+$回调 中$
+
+设置刷屏时间 [0-9]+
+$回调 中$
+$写 壳壳/群数据/%群号%/刷屏时间.txt a %参数1%$
+设置成功
+返回
+如果尾
+你不是我的主人，无权操作！
+$回调 中$
+
+
+禁言列表
+P:%Json%
+P:@P[pskey]
+P:@P[qun.qq.com]
+A:$访问 https://api.xingzhige.com/API/group_members/?uin=%Robot%&skey=%Skey%&pskey=%P%&group=%群号%$
+如果:@A[code]!=0
+@A[msg]
+返回
+如果尾
+数:@A[data][banned_speak_list]
+长:$JSON 长度 数$
+如果:%长%>0
+@A[data][banned_speak_list]
+返回
+如果尾
+暂无数据
+
+成员信息@.*
+P:%Json%
+P:@P[pskey]
+P:@P[qun.qq.com]
+A:$访问 https://api.xingzhige.com/API/group_members/?uin=%Robot%&skey=%Skey%&pskey=%P%&group=%群号%&qq=%AT0%$
+如果:@A[code]!=0
+@A[msg]
+返回
+如果尾
+账号：@A[data][uin]\n
+昵称：@A[data][nick]\n
+群昵称：@A[data][group_nick]\n
+性别：@A[data][sex]\n
+Q龄：@A[data][qage]\n
+权限：@A[data][role]\n
+禁言状态：@A[data][banned_speak]\n
+佩戴头衔：@A[data][wear_title]\n
+活跃等级：@A[data][level]\n
+活跃头衔：@A[data][level_title]\n
+//数组，需要遍历输出
+//拥有头衔：@A[data][medal_List]
+上次发言：$时间格式 @A[data][last_speak_time]000 yyyy-MM-dd HH:mm:ss$\n
+入群时间：$时间格式 @A[data][join_time]000 yyyy-MM-dd HH:mm:ss$
+
+我的头衔
+P:%Json%
+P:@P[pskey]
+P:@P[qun.qq.com]
+A:$访问 https://api.xingzhige.com/API/group_members/?uin=%Robot%&skey=%Skey%&pskey=%P%&group=%群号%&qq=%QQ%$
+如果:@A[code]!=0
+@A[msg]
+返回
+如果尾
+昵称：@A[data][nick]\n
+账号：@A[data][uin]\n
+群号：%群号%\n
+活跃等级：@A[data][level]\n
+活跃头衔：@A[data][level_title]\n
+佩戴头衔：@A[data][wear_title]\n
+拥有的头衔：\n
+━━━━━━━━━━━━━━━\n
+i:0
+:循环
+l:@A[data][medal_List]
+B:$JSON 长度 l$
+如果:%i%<%B%
+头衔：@A[data][medal_List][%i%][name]\n
+介绍：@A[data][medal_List][%i%][medal_desc]\n
+来源介绍：@A[data][medal_List][%i%][rule_desc]\n
+━━━━━━━━━━━━━━━\n\n
+i:[%i%+1]
+$jump :循环$
+返回
+如果尾
+
+换群头像
+如果:%IMGNUM%<=0
+请带图发送
+返回
+如果尾
+如果:%QQ%==%主人%
+//需要换成群头像的图片链接
+图:$图片链接 %IMG0%$
+图:$URLEncoder %图%$
+A:$访问 https://api.xingzhige.com/API/group_avatar/?uin=%Robot%&skey=%Skey%&group=%群%&img_url=%图%$
+@A[msg]
+返回
+如果尾
+如果:%群号%==292629548|%群号%==1142724004
+在此群无权使用！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+图:$图片链接 %IMG0%$
+图:$URLEncoder %图%$
+A:$访问 https://api.xingzhige.com/API/group_avatar/?uin=%Robot%&skey=%Skey%&group=%群%&img_url=%图%$
+@A[msg]
+返回
+如果尾
+
+
+
+
+[上下管理]
+如果:%Value%==1
+%QQ% 成为了管理员。
+返回
+如果尾
+如果:%Value%==0
+%QQ% 不再是管理员了。
+
+
+
+
+
+
+
+
+
+兽语加密 ?(.*)
+$访问 http://ovooa.com/API/sho_u/?msg=%括号1%&type=text&format=0$
+
+兽语解密 ?(.*)
+$访问 http://ovooa.com/API/sho_u/?msg=%括号1%&type=text&format=1$
+
+
+
+图转.*
+如果:%IMG0%!=
+$图片链接 %IMG0%$
+
+我是小主人吗
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+是的捏，感谢您的支持！
+返回
+如果尾
+不是捏，想成为请联系2958925805或访问http://dihuang.thz.cool
+
+我不是小主人吗
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+你是小主人捏，感谢您的支持！
+返回
+如果尾
+你不是小主人捏，想成为请联系2958925805或访问http://dihuang.thz.cool
+
+
+
+
+
+
+[内部]服务器介绍
+如果:%群号%==887867000
+返回
+如果尾
+允许重生锚爆炸，火焰蔓延，拥有玩家自制的精品addon，可以建立属于你的阵营！
+
+
+
+
+改(.*)@.*
+如果:%QQ%==%主人%|%QQ%==1636582402
+$改 %群号% %AT0% %括号1%$
+彳亍
+返回
+如果尾
+如果:%群号%==292629548|%群号%==1142724004|%群号%==887867000|%群号%==170467418
+你无权在此群使用本功能！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+$改 %群号% %AT0% %括号1%$
+彳亍
+返回
+如果尾
+1:主人主人，有人要霸占我
+2:哼!你不是主人，我不能听你的话
+3:你不是主人捏
+4:你要是在命令我，我要生气了
+5:不要逗我了，腻害不是主人
+6:你还不是主人，不能管理我
+7:主人!有人要尝试入侵机器人
+8:就不~\n你又不是人家的主人~
+9:我又不是傻子，你不是我的主人啊
+%%随机数1-9%%
+
+改 ?(.*) (.*)
+如果:%QQ%==%主人%|%QQ%==1636582402
+$改 %群号% %括号1% %括号2%$
+彳亍
+返回
+如果尾
+如果:%群号%==292629548|%群号%==1142724004|%群号%==887867000|%群号%==170467418
+你无权在此群使用本功能！
+返回
+如果尾
+如果:$读 授权/小主人 %QQ% 0$==%QQ%
+$改 %群号% %括号1% %括号2%$
+彳亍
+返回
+如果尾
+1:主人主人，有人要霸占我
+2:哼!你不是主人，我不能听你的话
+3:你不是主人捏
+4:你要是在命令我，我要生气了
+5:不要逗我了，腻害不是主人
+6:你还不是主人，不能管理我
+7:主人!有人要尝试入侵机器人
+8:就不~\n你又不是人家的主人~
+9:我又不是傻子，你不是我的主人啊
+%%随机数1-9%%
+
+
+
+申请(.*) (.*)
+如果:%QQ%==2958925805
+$申请群 %括号1% %括号2%$
+彳亍
+返回
+如果尾
+
+退群(.*)
+如果:%QQ%==2958925805
+$退出群 %括号1%$
+返回
+如果尾
+成为小主人才能使用，请联系2958925805
+
+表白功能
+════════\r
+表白[内容]\r
+匿名表白[内容]\r
+表白墙列表\r
+════表白════
+
+表白墙列表
+════════\r
+$读 表白/列表 爱 我也是有底线的ᕙ(`▿´)ᕗ$\r
+共计$读 表白/人数 情 0$人表白
+
+表白 ([\s\S]*)
+a:$读 表白/列表 爱 我也是有底线的ᕙ(`▿´)ᕗ$
+b:$读 表白/人数 情 0$
+@%昵称%表白成功！
+$写 表白/列表 爱 QQ:%QQ%\r昵称:%昵称%\r内容:%括号1%\r════════\r%a%$
+$写 表白/人数 情 [%b%+1]$
+
+匿名表白 ([\s\S]*)
+a:$读 表白/列表 爱 我也是有底线的ᕙ(`▿´)ᕗ$
+b:$读 表白/人数 情 0$
+@%昵称%表白成功！
+$写 表白/列表 爱 QQ:匿名\r昵称:匿名\r内容:%括号1%\r════════\r%a%$
+$写 表白/人数 情 [%b%+1]$
+
+清空表白
+如果:%QQ%==%主人%
+$写 表白/列表 爱 我也是有底线的ᕙ(`▿´)ᕗ$
+$写 表白/人数 情 0$
+清空成功
+返回
+如果尾
+
+
+
+聊天记录卡片
+设置内部消息 数字（最多4）\n\n
+设置预览消息 内容（预览内容，即[聊天记录]部分）\n\n
+设置底部消息 内容（即“查看x条消息”部分）\n\n
+自定义(数字)条记录()[空]()（最多4条，根据内部消息数字决定要填写的参数）\n\n
+自定义同发言人(数字)条记录()[空]()（最多4条，第一个括号中为你要设置的发言人，第二个括号中设置内容，根据内部消息数字决定要填写的参数）\n\n
+骗人卡片\n\n
+说明
+
+骗人卡片
+自定义涩（仅支持两条消息自定义）
+
+说明
+在自定义卡片中，括号不需要打出来，仅作为标识\n
+自定义记录中，第一个括号中为第一条消息的发言人，第二个括号中为第一条消息的内容，以此类推\n
+自定义同发言人记录中，第一个括号中为所有消息的发言人，第二个括号中为第一条消息的内容，第三个括号为第二条，以此类推
+
+设置预览消息 ?(.*)
+$写 卡片/聊天记录/%群号%/预览消息 %QQ% %括号1%$
+设置成功了！
+
+设置底部消息 ?(.*)
+$写 卡片/聊天记录/%群号%/底部消息 %QQ% %括号1%$
+设置成功了！
+
+自定义1条记录(.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Qu68z3AuQgh2wtJK2RiJDY9JMDd4SrgayxW55fRhWzfgfasTzcQaE++/nWkJUCMS" m_fileName="7080926726893109863" tSum="1" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看1条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Qu68z3AuQgh2wtJK2RiJDY9JMDd4SrgayxW55fRhWzfgfasTzcQaE++/nWkJUCMS" m_fileName="7080926726893109863" tSum="1" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义2条记录(.*) (.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="C67+OvO5i7ypfcM7isMe1lEaDpDj479z6Od+e2JQOBORD2nPKw/jV0mTevOdZR76" m_fileName="7080927005808809331" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义3条记录(.*) (.*) (.*) (.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="ZZWPyziQD1xQ2goioXN+fDmzw3q/7YgroOJgX1t6q0usofsF1YLsyA394oq1eqCk" m_fileName="7080926618001965487" tSum="3" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号5%:  %括号6%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看3条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="ZZWPyziQD1xQ2goioXN+fDmzw3q/7YgroOJgX1t6q0usofsF1YLsyA394oq1eqCk" m_fileName="7080926618001965487" tSum="3" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号5%:  %括号6%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义4条记录(.*) (.*) (.*) (.*) (.*) (.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Vl/zBI2TrZ35qKY6yKPMUxGqNvbqaXrqDuECt8dXaTc91BQ7E9CZYNvcxYRJtx+O" m_fileName="7080926820567018041" tSum="4" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号5%:  %括号6%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号7%:  %括号8%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看4条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Vl/zBI2TrZ35qKY6yKPMUxGqNvbqaXrqDuECt8dXaTc91BQ7E9CZYNvcxYRJtx+O" m_fileName="7080926820567018041" tSum="4" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号5%:  %括号6%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号7%:  %括号8%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+
+自定义同发言人1条记录(.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Qu68z3AuQgh2wtJK2RiJDY9JMDd4SrgayxW55fRhWzfgfasTzcQaE++/nWkJUCMS" m_fileName="7080926726893109863" tSum="1" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看1条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Qu68z3AuQgh2wtJK2RiJDY9JMDd4SrgayxW55fRhWzfgfasTzcQaE++/nWkJUCMS" m_fileName="7080926726893109863" tSum="1" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义同发言人2条记录(.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="C67+OvO5i7ypfcM7isMe1lEaDpDj479z6Od+e2JQOBORD2nPKw/jV0mTevOdZR76" m_fileName="7080927005808809331" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号3%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看2条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="C67+OvO5i7ypfcM7isMe1lEaDpDj479z6Od+e2JQOBORD2nPKw/jV0mTevOdZR76" m_fileName="7080927005808809331" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号3%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义同发言人3条记录(.*) (.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="ZZWPyziQD1xQ2goioXN+fDmzw3q/7YgroOJgX1t6q0usofsF1YLsyA394oq1eqCk" m_fileName="7080926618001965487" tSum="3" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号3%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号4%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义同发言人4条记录(.*) (.*) (.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Vl/zBI2TrZ35qKY6yKPMUxGqNvbqaXrqDuECt8dXaTc91BQ7E9CZYNvcxYRJtx+O" m_fileName="7080926820567018041" tSum="4" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号3%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号4%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号5%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看4条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="Vl/zBI2TrZ35qKY6yKPMUxGqNvbqaXrqDuECt8dXaTc91BQ7E9CZYNvcxYRJtx+O" m_fileName="7080926820567018041" tSum="4" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号3%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号4%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号5%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+自定义涩(.*) (.*) (.*) (.*)
+预:$读 卡片/聊天记录/%群号%/预览消息 %QQ% 0$
+底:$读 卡片/聊天记录/%群号%/底部消息 %QQ% 0$
+如果:%底%==0
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="awS5RD1s+5EMQW5P5/q2+XWTLSCT97kFK3YgXtpg7qlU8Ijo6zfqmuTNs/bwLOXj" m_fileName="7080534307122401520" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">查看100条转发消息</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+返回
+如果尾
+card:1
+<?xml version='1.0' encoding='UTF-8' standalone='yes' ?><msg serviceID="35" templateID="1" action="viewMultiMsg" brief="%预%" m_resid="awS5RD1s+5EMQW5P5/q2+XWTLSCT97kFK3YgXtpg7qlU8Ijo6zfqmuTNs/bwLOXj" m_fileName="7080534307122401520" tSum="2" sourceMsgId="0" url="" flag="3" adverSign="0" multiMsgFlag="0"><item layout="1" advertiser_id="0" aid="0"><title size="34" maxLines="2" lineSpace="12">群聊的聊天记录</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号1%:  %括号2%</title><title size="26" color="#777777" maxLines="2" lineSpace="12">%括号3%:  %括号4%</title><hr hidden="false" style="0" /><summary size="26" color="#777777">%底%</summary></item><source name="聊天记录" icon="" action="" appid="-1" /></msg>
+
+
+(开启|关闭)点歌
+如果:%QQ%==%主人%|$读 授权/小主人 %QQ% 0$==%QQ%
+$写 测试/点歌/状态 %群% %括号1%$
+已%括号1%点歌
+
+
+(平台)?切换 ?(?i)(网易|QQ|酷我|酷狗|咪咕)
+a:$读 测试/点歌/平台 a 0$
+如果:%a%==%括号2%
+已处于"%括号2%"平台无需切换
+返回
+如果尾
+点歌平台"%a%"\n
+已切换为"%括号2%"
+$写 测试/点歌/平台 a %括号2%$
+
+
+
+点歌系统|指令点歌
+@%昵称%\n
+点歌+歌曲名称\n
+网易点歌+歌曲名称\n
+切换+(网易.QQ.酷我.酷狗.咪咕)\n
+歌曲名称不能加空格\n
+要是想要作者直接往后怼，也不要加空格\n
+
+
+点歌点歌
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+你搁这搁这呢
+
+点歌
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+json:{"app":"com.tencent.structmsg","desc":"音乐","view":"music","ver":"0.0.0.1","prompt":"[分享]你没歌名点个der","appID":"","sourceName":"","actionData":"","actionData_A":"","sourceUrl":"","meta":{"music":{"action":"","android_pkg_name":"","app_type":1,"appid":100495085,"ctime":1646799816,"desc":"你没歌名点个der","jumpUrl":"https://baidu.com","musicUrl":"http://baidu.com","preview":"http://baidu.com","sourceMsgId":"0","source_icon":"https://i.gtimg.cn/open/app_icon/00/49/50/85/100495085_100_m.png","source_url":"","tag":"野兽先辈","title":"你没歌名点个der","uin":2354452553}},"config":{"ctime":1654434628,"forward":true,"token":"549b5afa08722eace91fdf1334a0a8c3","type":"normal"},"text":"","sourceAd":"","extra":"{\"app_type\":1,\"appid\":100495085,\"uin\":2354452553}"}
+
+(#)?(网易|QQ|酷我|酷狗|咪咕)?(云音乐|云|音乐)?点歌 ?(.*)
+a:$读 测试/点歌/平台 a 0$
+b:$读 测试/点歌/状态 %群% 0$
+如果:%b%==关闭
+返回
+如果尾
+如果:%括号4%==
+$回调 点歌指令$
+返回
+如果尾
+如果:%括号2%!=
+$回调 %括号2%%括号3%%括号4%$
+返回
+如果尾
+如果:%a%==0
+$回调 QQ%括号4%$
+返回
+如果尾
+$回调 %a%%括号4%$
+
+
+
+
+[内部](?i)QQ(音乐)? ?([\s\S]*)
+a:$读 测试/信息/%QQ% Skey 0$
+b:$访问 http://ovooa.com/API/QQ_Music/?Skey=%a%&uin=%主人%&msg=%括号2%&n=1&type=json$
+$输出为 %b%$
+
+
+[内部]网易(云音乐|云)? ?([\s\S]*)
+a:$访问 http://ovooa.com/API/wydg/api.php?msg=%括号2%&n=1&type=json$
+$输出为 %a%$
+
+
+[内部]酷狗(音乐)? ?([\s\S]*)
+a:$访问 http://ovooa.com/API/kgdg/api.php?msg=%括号2%&n=1&type=json$
+$输出为 %a%$
+
+
+[内部]酷我(音乐)? ?([\s\S]*)
+a:$访问 http://ovooa.com/API/kwdg/api.php?msg=%括号2%&n=1&type=json&sc=1$
+$输出为 %a%$
+
+
+[内部]咪咕(音乐)? ?([\s\S]*)
+a:$访问 http://ovooa.com/API/migu/api.php?msg=%括号2%&n=1&p=1&sc=15&type=json$
+$输出为 %a%$
+
+
+@壳壳 .*这一脚.*
+如果:$读 群管/%群号%/黑名 %QQ% 0$==1
+返回
+如果尾
+json:{"app":"com.tencent.miniapp_01","desc":"哔哩哔哩","view":"view_8C8E89B49BE609866298ADDFF2DBABA4","ver":"1.0.0.19","prompt":"[QQ小程序]哔哩哔哩","meta":{"detail_1":{"appType":0,"appid":"1109937557","desc":"【典藏版.补档】因为你我会记住那一分钟","gamePoints":"","gamePointsUrl":"","host":{"nick":"creeper！","uin":2958925805},"icon":"https:\/\/open.gtimg.cn\/open\/app_icon\/00\/95\/17\/76\/100951776_100_m.png?t=1640166716","preview":"pubminishare-30161.picsz.qpic.cn\/eeeea24c-9573-491d-9bd6-417d8405cb99","qqdocurl":"https:\/\/b23.tv\/wVroSDH?share_medium=android&share_source=qq&bbid=XZ897988D9E881B7F98B050C4457317825051&ts=1648689218650","scene":1036,"shareTemplateData":{},"shareTemplateId":"8C8E89B49BE609866298ADDFF2DBABA4","showLittleTail":"","title":"哔哩哔哩","url":"m.q.qq.com\/a\/s\/ddb86a8734bf1cccbf61a153b6e4cb32"}},"config":{"autoSize":0,"ctime":1648689234,"forward":1,"height":0,"token":"ece7e054d7fcfba8317466f5a22d66b7","type":"normal","width":0}}
+
+
+
+
+今日占卜
+如果:$读 %群号%/占卜 %QQ% 0$==%时间dd%
+你今天已经占卜过了哦
+返回
+如果尾
+$写 %群号%/占卜 %QQ% %时间dd%$
+a:%随机数1-51%
+如果:%a%==1
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot1.jpg±
+返回
+如果尾
+如果:%a%==1
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot10.jpg±
+返回
+如果尾
+如果:%a%==2
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot12.jpg±
+返回
+如果尾
+如果:%a%==3
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot11.jpg±
+返回
+如果尾
+如果:%a%==4
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot13.jpg±
+返回
+如果尾
+如果:%a%==5
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot14.jpg±
+返回
+如果尾
+如果:%a%==6
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot15.jpg±
+返回
+如果尾
+如果:%a%==7
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot16.jpg±
+返回
+如果尾
+如果:%a%==8
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot17.jpg±
+返回
+如果尾
+如果:%a%==9
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot18.jpg±
+返回
+如果尾
+如果:%a%==10
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot19.jpg±
+返回
+如果尾
+如果:%a%==11
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot2.jpg±
+返回
+如果尾
+如果:%a%==12
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot20.jpg±
+返回
+如果尾
+如果:%a%==13
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot21.jpg±
+返回
+如果尾
+如果:%a%==14
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot22.jpg±
+返回
+如果尾
+如果:%a%==15
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot23.jpg±
+返回
+如果尾
+如果:%a%==16
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot24.jpg±
+返回
+如果尾
+如果:%a%==17
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot25.jpg±
+返回
+如果尾
+如果:%a%==18
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot26.jpg±
+返回
+如果尾
+如果:%a%==19
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot27.jpg±
+返回
+如果尾
+如果:%a%==20
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot28.jpg±
+返回
+如果尾
+如果:%a%==21
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot29.jpg±
+返回
+如果尾
+如果:%a%==22
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot3.jpg±
+返回
+如果尾
+如果:%a%==23
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot30.jpg±
+返回
+如果尾
+如果:%a%==24
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot31.jpg±
+返回
+如果尾
+如果:%a%==25
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot32.jpg±
+返回
+如果尾
+如果:%a%==26
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot33.jpg±
+返回
+如果尾
+如果:%a%==27
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot34.jpg±
+返回
+如果尾
+如果:%a%==28
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot35.jpg±
+返回
+如果尾
+如果:%a%==29
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot36.jpg±
+返回
+如果尾
+如果:%a%==30
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot37.jpg±
+返回
+如果尾
+如果:%a%==31
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot38.jpg±
+返回
+如果尾
+如果:%a%==32
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot39.jpg±
+返回
+如果尾
+如果:%a%==33
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot4.jpg±
+返回
+如果尾
+如果:%a%==34
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot40.jpg±
+返回
+如果尾
+如果:%a%==35
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot41.jpg±
+返回
+如果尾
+如果:%a%==36
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot42.jpg±
+返回
+如果尾
+如果:%a%==37
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot43.jpg±
+返回
+如果尾
+如果:%a%==38
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot44.jpg±
+返回
+如果尾
+如果:%a%==39
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot45.jpg±
+返回
+如果尾
+如果:%a%==40
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot46.jpg±
+返回
+如果尾
+如果:%a%==41
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot47.jpg±
+返回
+如果尾
+如果:%a%==42
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot48.jpg±
+返回
+如果尾
+如果:%a%==43
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot49.jpg±
+返回
+如果尾
+如果:%a%==44
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot5.jpg±
+返回
+如果尾
+如果:%a%==45
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot50.jpg±
+返回
+如果尾
+如果:%a%==46
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot51.jpg±
+返回
+如果尾
+如果:%a%==47
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot52.jpg±
+返回
+如果尾
+如果:%a%==48
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot6.jpg±
+返回
+如果尾
+如果:%a%==49
+±img=https://dl3.img.timecdn.cn/2022/06/03/tarot7.jpg±
+返回
+如果尾
+如果:%a%==50
+±img=https://dl.img.timecdn.cn/2022/06/03/tarot8.jpg±
+返回
+如果尾
+如果:%a%==51
+±img=https://dl2.img.timecdn.cn/2022/06/03/tarot9.jpg±
+
+疯话
+$访问 https://api.thz.cool/sb$
+
+
+
+@壳壳 轰隆
+±img=http://gchat.doumsg.top/gchatpic_new/0/0-0-0387FDBA0F7F33D88D7C8A4B3DB62A69/0±
+
+
+笑死了疯话
+±img=http://gchat.doumsg.top/gchatpic_new/0/0-0-A61310E4C2641BDE6B6FE9F2FF7B22A3/0±
+
+
+圣经
+±img=http://gchat.doumsg.top/gchatpic_new/0/0-0-65298F99EE03E3CE8BEDDF3CEF34D92E/0±
+
+
+@壳壳 creeper？
+aww man
