@@ -10,19 +10,19 @@ importers:
     dependencies:
       '@fraqjs/color-log':
         specifier: ^0.2.0
-        version: 0.2.0(@fraqjs/fraq@0.8.2)
+        version: 0.2.0(@fraqjs/fraq@0.9.0)
       '@fraqjs/fraq':
-        specifier: ^0.8.2
-        version: 0.8.2
+        specifier: ^0.9.0
+        version: 0.9.0
       '@fraqjs/plugin-kysely':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.8.2)
+        version: 0.1.2(@fraqjs/fraq@0.9.0)
       '@fraqjs/plugin-random':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.8.2)
+        version: 0.1.2(@fraqjs/fraq@0.9.0)
       '@fraqjs/plugin-takumi':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.8.2)(react@19.2.7)
+        version: 0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7)
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.4.16
@@ -257,8 +257,8 @@ packages:
     peerDependencies:
       '@fraqjs/fraq': ^0.3.3
 
-  '@fraqjs/fraq@0.8.2':
-    resolution: {integrity: sha512-JBW5QxMJTr+j2sXE+PiEjXllyzKTRXfakum4jiiFYQmNG9OLUoVDJfIH1GuSufFrVAOD2WobXH3vJvT+TWlFoQ==}
+  '@fraqjs/fraq@0.9.0':
+    resolution: {integrity: sha512-rpNU9aoaLAb5TSLqcQWHdDpN3/jtVC05M2YdklPwLHZ3vPlgP/E8BbQZRdwYOMZl16OQxKAp8vQmrPPjNnvPpA==}
     engines: {node: '>=22'}
 
   '@fraqjs/plugin-kysely@0.1.2':
@@ -501,27 +501,27 @@ snapshots:
   '@esbuild/win32-x64@0.28.0':
     optional: true
 
-  '@fraqjs/color-log@0.2.0(@fraqjs/fraq@0.8.2)':
+  '@fraqjs/color-log@0.2.0(@fraqjs/fraq@0.9.0)':
     dependencies:
-      '@fraqjs/fraq': 0.8.2
+      '@fraqjs/fraq': 0.9.0
       chalk: 5.6.2
 
-  '@fraqjs/fraq@0.8.2':
+  '@fraqjs/fraq@0.9.0':
     dependencies:
       mitt: 3.0.1
 
-  '@fraqjs/plugin-kysely@0.1.2(@fraqjs/fraq@0.8.2)':
+  '@fraqjs/plugin-kysely@0.1.2(@fraqjs/fraq@0.9.0)':
     dependencies:
-      '@fraqjs/fraq': 0.8.2
+      '@fraqjs/fraq': 0.9.0
       kysely: 0.29.2
 
-  '@fraqjs/plugin-random@0.1.2(@fraqjs/fraq@0.8.2)':
+  '@fraqjs/plugin-random@0.1.2(@fraqjs/fraq@0.9.0)':
     dependencies:
-      '@fraqjs/fraq': 0.8.2
+      '@fraqjs/fraq': 0.9.0
 
-  '@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.8.2)(react@19.2.7)':
+  '@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7)':
     dependencies:
-      '@fraqjs/fraq': 0.8.2
+      '@fraqjs/fraq': 0.9.0
       '@takumi-rs/core': 1.7.0(react@19.2.7)
       '@takumi-rs/helpers': 1.7.0(react@19.2.7)
       react: 19.2.7

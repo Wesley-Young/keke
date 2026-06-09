@@ -42,18 +42,15 @@ Fraq 需要在 Node.js 22+ 环境（或其他的支持 WebSocket API 的服务�
 在一开始的例子中，我们已经见过了一个简单的指令定义：
 
 ```typescript
-ctx.router.command({
-  name: 'echo',
-  pattern: {
-    content: param.str(),
-  },
-  execute(session, { content }) {
+ctx.router
+  .command('echo')
+  .arg('content', param.str())
+  .execute((session, { content }) => {
     // ...
-  },
-});
+  });
 ```
 
-这段代码包含了三个要素：指令叫什么、需要什么参数、以及收到这个指令时要执行什么操作。“快速开始” 一节已经对上述代码进行了简要的拆解，下面我们将更深入地介绍 Fraq 中的指令系统的设计与使用方法。
+这段代码包含了三个要素：指令叫什么、需要什么参数、以及收到这个指令时要执行什么操作。`command('echo')` 指定名称，后续的 `.arg(...)` 逐个声明参数，最后的 `.execute(...)` 注册处理函数。“快速开始” 一节已经对上述代码进行了简要的拆解，下面我们将更深入地介绍 Fraq 中的指令系统的设计与使用方法。
 
 ## 认识参数类型 [#认识参数类型]
 
@@ -70,21 +67,18 @@ Fraq 提供了多种参数类型来满足不同的需求：
 我们用一个例子来完整地展示一下这些参数是如何使用的：
 
 ```typescript
-ctx.router.command({
-  name: 'foo',
-  pattern: {
-    l: param.literal('hello'),
-    s: param.str(),
-    n: param.num(),
-    u: param.union('option1', 'option2', 'option3'),
-    seg: param.segment('mention'),
-    g: param.greedy(),
-    rest: param.catchAll(),
-  },
-  execute(session, { l, s, n, u, seg, g, rest }) {
+ctx.router
+  .command('foo')
+  .arg('l', param.literal('hello'))
+  .arg('s', param.str())
+  .arg('n', param.num())
+  .arg('u', param.union('option1', 'option2', 'option3'))
+  .arg('seg', param.segment('mention'))
+  .arg('g', param.greedy())
+  .arg('rest', param.catchAll())
+  .execute((session, { l, s, n, u, seg, g, rest }) => {
     // ...
-  },
-});
+  });
 ```
 
 满足上述指令的一个用户输入可以是：
@@ -129,19 +123,18 @@ param.str().describe('要回显的文本内容');
 ```typescript
 ctx.router
   .group('parent')
-  .command({
-    name: 'child1',
-    pattern: { arg1: param.str() },
-    execute(session, { arg1 }) {
-      // Handle child1 command
-    },
-  })
-  .command({
-    name: 'child2',
-    pattern: { arg2: param.num() },
-    execute(session, { arg2 }) {
-      // Handle child2 command
-    },
+  .command('child1')
+  .arg('arg1', param.str())
+  .execute((session, { arg1 }) => {
+    // Handle child1 command
+  });
+
+ctx.router
+  .group('parent')
+  .command('child2')
+  .arg('arg2', param.num())
+  .execute((session, { arg2 }) => {
+    // Handle child2 command
   });
 ```
 
@@ -152,29 +145,25 @@ ctx.router
 ```typescript
 const parentGroup = ctx.router.group('parent');
 parentGroup
-  .command({
-    name: 'child1',
-    pattern: { arg1: param.str() },
-    execute(session, { arg1 }) {
-      // Handle child1 command
-    },
-  })
-  .command({
-    name: 'child2',
-    pattern: { arg2: param.num() },
-    execute(session, { arg2 }) {
-      // Handle child2 command
-    },
+  .command('child1')
+  .arg('arg1', param.str())
+  .execute((session, { arg1 }) => {
+    // Handle child1 command
+  });
+parentGroup
+  .command('child2')
+  .arg('arg2', param.num())
+  .execute((session, { arg2 }) => {
+    // Handle child2 command
   });
 
 const subGroup = parentGroup.group('sub');
-subGroup.command({
-  name: 'child3',
-  pattern: { arg3: param.greedy() },
-  execute(session, { arg3 }) {
+subGroup
+  .command('child3')
+  .arg('arg3', param.greedy())
+  .execute((session, { arg3 }) => {
     // Handle child3 command
-  },
-});
+  });
 ```
 
 这个 router 可以接受以下的输入：
@@ -185,18 +174,16 @@ subGroup.command({
 
 ## 模式匹配 [#模式匹配]
 
-`ctx.router` 提供了一个名为 `rawPattern` 的方法，它允许我们直接使用一个参数模式对象从头开始匹配用户输入，而不是定义指令名称和参数类型，通过检测用户输入是否符合这个模式来决定是否调用对应的处理函数。例如，如果我们需要用户先引用（回复）一条消息，再输入指令，我们可以定义如下的 Raw Pattern：
+`ctx.router` 提供了一个名为 `rawPattern` 的方法，它允许我们直接从用户输入开头匹配参数模式，而不是先匹配指令名称；router 会通过检测用户输入是否符合这个模式来决定是否调用对应的处理函数。例如，如果我们需要用户先引用（回复）一条消息，再输入指令，我们可以定义如下的 Raw Pattern：
 
 ```typescript
-ctx.router.rawPattern({
-  pattern: {
-    reply: param.segment('reply'),
-    content: param.greedy(),
-  },
-  execute(session, { reply, content }) {
+ctx.router
+  .rawPattern()
+  .arg('reply', param.segment('reply'))
+  .arg('content', param.greedy())
+  .execute((session, { reply, content }) => {
     // ...
-  },
-});
+  });
 ```
 
 这样就可以通过 `reply` 来拿到用户引用的消息段信息，通过 `content` 来拿到用户输入的剩余文本信息了。这比一般的指令定义更灵活，因为它不要求用户输入一个特定的指令名称，只要输入符合模式就可以了。
@@ -204,14 +191,12 @@ ctx.router.rawPattern({
 如果需要捕获完整的剩余消息内容，包括文本、提及、图片等消息段，可以使用 `param.catchAll()`：
 
 ```typescript
-ctx.router.rawPattern({
-  pattern: {
-    content: param.catchAll(),
-  },
-  execute(session, { content }) {
+ctx.router
+  .rawPattern()
+  .arg('content', param.catchAll())
+  .execute((session, { content }) => {
     // content: milky.IncomingSegment[]
-  },
-});
+  });
 ```
 
 `param.catchAll()` 会消费当前位置之后的所有剩余内容，因此它只能作为一个模式中的最后一个参数注册。
@@ -229,37 +214,30 @@ tp Steve Alex       // 将玩家 Steve 传送到玩家 Alex 的位置
 为了匹配上述不同的参数模式，我们可以创建一个名为 `tp` 的指令组，并在其中用 `rawPattern` 方法来定义不同的参数模式：
 
 ```typescript
-ctx.router
-  .group('tp')
-  .rawPattern({
-    pattern: {
-      x: param.num(),
-      y: param.num(),
-      z: param.num(),
-    },
-    execute(session, { x, y, z }) {
-      // Handle tp with coordinates only
-    },
-  })
-  .rawPattern({
-    pattern: {
-      player: param.str(),
-      x: param.num(),
-      y: param.num(),
-      z: param.num(),
-    },
-    execute(session, { player, x, y, z }) {
-      // Handle tp with player and coordinates
-    },
-  })
-  .rawPattern({
-    pattern: {
-      player1: param.str(),
-      player2: param.str(),
-    },
-    execute(session, { player1, player2 }) {
-      // Handle tp with player to player
-    },
+const tp = ctx.router.group('tp');
+
+tp.rawPattern()
+  .arg('x', param.num())
+  .arg('y', param.num())
+  .arg('z', param.num())
+  .execute((session, { x, y, z }) => {
+    // Handle tp with coordinates only
+  });
+
+tp.rawPattern()
+  .arg('player', param.str())
+  .arg('x', param.num())
+  .arg('y', param.num())
+  .arg('z', param.num())
+  .execute((session, { player, x, y, z }) => {
+    // Handle tp with player and coordinates
+  });
+
+tp.rawPattern()
+  .arg('player1', param.str())
+  .arg('player2', param.str())
+  .execute((session, { player1, player2 }) => {
+    // Handle tp with player to player
   });
 ```
 
@@ -269,19 +247,20 @@ ctx.router
   定义指令重载时需要格外小心，确保不同的参数模式之间没有歧义，否则可能会导致某些输入无法正确匹配到对应的处理函数。下面是一个引起歧义的案例：
 
   ```typescript
-  ctx.router
-    .group('test')
-    .rawPattern({
-      pattern: { arg: param.str() },
-      execute(session, { arg }) {
-        // Handle test with string argument
-      },
-    })
-    .rawPattern({
-      pattern: { arg: param.num() },
-      execute(session, { arg }) {
-        // Handle test with number argument
-      },
+  const test = ctx.router.group('test');
+
+  test
+    .rawPattern()
+    .arg('arg', param.str())
+    .execute((session, { arg }) => {
+      // Handle test with string argument
+    });
+
+  test
+    .rawPattern()
+    .arg('arg', param.num())
+    .execute((session, { arg }) => {
+      // Handle test with number argument
     });
   ```
 
@@ -310,13 +289,12 @@ const adminRouter = ctx.router.filter(
     session.raw.group_member.role !== 'member',
 );
 
-adminRouter.command({
-  name: 'admincmd',
-  pattern: { arg: param.str() },
-  execute(session, { arg }) {
+adminRouter
+  .command('admincmd')
+  .arg('arg', param.str())
+  .execute((session, { arg }) => {
     // This command can only be triggered by group owner and administrators
-  },
-});
+  });
 ```
 
 在上面的例子中，我们创建了一个新的 Router 实例 `adminRouter`，它只会在用户是群主或管理员时触发指令。我们在 `adminRouter` 上定义了一个指令 `admincmd`，只有满足过滤条件的输入才能触发这个指令。
@@ -433,16 +411,13 @@ export const EchoPlugin = definePlugin({
   name: 'echo',
   apply(ctx) {
     ctx.logger.info('Echo plugin loaded');
-    ctx.router.command({
-      name: 'echo',
-      pattern: {
-        content: param.str(),
-      },
-      execute(session, { content }) {
+    ctx.router
+      .command('echo')
+      .arg('content', param.str())
+      .execute((session, { content }) => {
         ctx.logger.debug(`Received echo command: ${content}`);
         session.reply(msg`You said: ${content}`);
-      },
-    });
+      });
   },
 });
 ```
@@ -739,15 +714,12 @@ import { definePlugin } from '@fraqjs/fraq';
 export const EchoPlugin = definePlugin({
   name: 'echo',
   apply(ctx) {
-    ctx.router.command({
-      name: 'echo',
-      pattern: {
-        content: param.str(),
-      },
-      execute(session, { content }) {
+    ctx.router
+      .command('echo')
+      .arg('content', param.str())
+      .execute((session, { content }) => {
         session.reply(msg`You said: ${content}`);
-      },
-    });
+      });
   },
 });
 
@@ -786,17 +758,14 @@ definePlugin({
       prefixFaceId: number;
     },
   ) {
-    ctx.router.command({
-      name: 'echo',
-      pattern: {
-        content: param.str(),
-      },
-      execute(session, { content }) {
+    ctx.router
+      .command('echo')
+      .arg('content', param.str())
+      .execute((session, { content }) => {
         session.reply(
           msg`${seg.face(options.prefixFaceId)} You said: ${content}`,
         );
-      },
-    });
+      });
   },
 });
 ```
@@ -1273,12 +1242,10 @@ const ctx = Context.fromUrl('<替换成你的 Milky 协议端地址>', {
   // accessToken: '<如果你的 Milky 协议端配置了 token，请在这里添加>',
 });
 
-ctx.router.command({
-  name: 'echo',
-  pattern: {
-    content: param.str(),
-  },
-  execute(session, { content }) {
+ctx.router
+  .command('echo')
+  .arg('content', param.str())
+  .execute((session, { content }) => {
     session.reply([
       {
         type: 'text',
@@ -1287,8 +1254,7 @@ ctx.router.command({
         },
       },
     ]);
-  },
-});
+  });
 
 ctx.start();
 ```
@@ -1313,12 +1279,10 @@ const ctx = Context.fromUrl('<替换成你的 Milky 协议端地址>');
 `Context` 是 Fraq 的核心类，代表了一个机器人实例，它包含了机器人的配置、状态、路由等信息。我们通过 `Context.fromUrl` 方法来创建一个新的 `Context` 实例，并传入 Milky 协议端的地址。
 
 ```typescript
-ctx.router.command({
-  name: 'echo',
-  pattern: {
-    content: param.str(),
-  },
-  execute(session, { content }) {
+ctx.router
+  .command('echo')
+  .arg('content', param.str())
+  .execute((session, { content }) => {
     session.reply([
       {
         type: 'text',
@@ -1327,15 +1291,14 @@ ctx.router.command({
         },
       },
     ]);
-  },
-});
+  });
 ```
 
-`router` 是 `Context` 实例的一个属性，我们用它来定义机器人将会响应哪些指令，并且这些指令的规则分别是什么样的。`ctx.router.command` 方法用来定义一个指令。它接受一个对象，其中包含：
+`router` 是 `Context` 实例的一个属性，我们用它来定义机器人将会响应哪些指令，并且这些指令的规则分别是什么样的。`ctx.router.command('echo')` 会开始定义一个名为 `echo` 的指令；随后可以继续调用 `.arg(...)` 添加参数，最后通过 `.execute(...)` 注册处理函数。
 
-* `name` 是指令的名称，这里是 `echo`，表示当用户发送的消息以 `echo` 开头时，这个指令就会被触发。
-* `pattern` 是一个对象，定义了这个指令的参数规则。我们给 `echo` 指令定义了一个 `content` 参数，它是一个字符串类型的参数，表示用户在 `echo` 后面输入的文本内容。
-* `execute` 是一个方法，当指令被触发时，这个方法会被调用。它接受两个参数：`session` 和一个包含指令参数的对象。
+* `.command('echo')` 指定了指令名称，表示当用户发送的消息以 `echo` 开头时，这个指令就会被触发。
+* `.arg('content', param.str())` 定义了这个指令的参数规则。这里的 `content` 是一个字符串类型的参数，表示用户在 `echo` 后面输入的文本内容。
+* `.execute(...)` 用于注册处理函数。当指令被触发时，这个函数会被调用。它接受两个参数：`session` 和一个包含指令参数的对象。
   * `session` 代表了当前的会话，可以用它来发送回复消息等操作。我们在回调函数中使用 `session.reply` 方法来回复一条消息。
   * 第二个参数是一个对象，包含了指令的参数，这里我们通过[解构赋值](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Operators/Destructuring)的方式直接获取了 `content` 参数。得益于 TypeScript 的类型推断，编译器知道 `content` 是一个字符串类型的参数，因此我们不需要再重复声明它的类型。
 
@@ -1617,30 +1580,26 @@ definePlugin({
 机器人: 北京今天晴，最高气温...
 ```
 
-传统的 `ctx.router.command` 遵循单纯的命令-响应模式，不适合处理多轮对话。但使用 `ctx.conversation.command`，我们可以轻松地实现这个功能。与前者不同，`ctx.conversation.command` 的 `execute` 方法接受第三个参数 `scope`，它包含一个函数 `open`，我们可以通过它来启动一个新的会话：
+传统的 `ctx.router.command` 遵循单纯的命令-响应模式，不适合处理多轮对话。但使用 `ctx.conversation.command`，我们可以轻松地实现这个功能。它的注册方式与 `ctx.router.command` 类似，同样可以通过 `.arg(...)` 声明参数；不同的是，`ctx.conversation.command(...).execute(...)` 的处理函数接受第三个参数 `scope`，它包含一个函数 `open`，我们可以通过它来启动一个新的会话：
 
 ```typescript
-ctx.conversation.command({
-  name: '天气',
-  pattern: {},
-  async execute(session, _, { open }) {
-    await session.reply(msg`你想查询哪个城市的天气呢？`);
+ctx.conversation.command('天气').execute(async (session, _, { open }) => {
+  await session.reply(msg`你想查询哪个城市的天气呢？`);
 
-    const city = await open<string>(({ router, done }) => {
-      router.rawPattern({
-        pattern: { city: param.str() },
-        async execute(_, { city }) {
-          done(city);
-        },
+  const city = await open<string>(({ router, done }) => {
+    router
+      .rawPattern()
+      .arg('city', param.str())
+      .execute(async (_, { city }) => {
+        done(city);
       });
-    }); // city: string | null
-    if (city === null) {
-      return;
-    }
+  }); // city: string | null
+  if (city === null) {
+    return;
+  }
 
-    const weatherInfo = await getWeatherForCity(city);
-    await session.reply(msg`${weatherInfo}`);
-  },
+  const weatherInfo = await getWeatherForCity(city);
+  await session.reply(msg`${weatherInfo}`);
 });
 ```
 
