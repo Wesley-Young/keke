@@ -20,6 +20,10 @@ const HIGH_CHARM_WAIT_MIN_MS = 10_000;
 const HIGH_CHARM_WAIT_MAX_MS = 20_000;
 const LOW_CHARM_WAIT_MIN_MS = 15_000;
 const LOW_CHARM_WAIT_MAX_MS = 30_000;
+const SPECIAL_SELL_EVENT_CHANCE_WEIGHT = 1;
+const SPECIAL_SELL_EVENT_NORMAL_WEIGHT = 9;
+const SPECIAL_SELL_EVENT_MIN_MULTIPLIER = 10;
+const SPECIAL_SELL_EVENT_MAX_MULTIPLIER = 15;
 const YARN_REWARD = 19_900;
 
 const fishingItemKinds = [
@@ -68,6 +72,11 @@ interface CatchResult {
   text: string;
   inventoryPatch?: FishingInventoryPatch;
   currencyPatch?: CurrencyPatch;
+}
+
+interface SellShellResult {
+  shellReward: number;
+  message?: string;
 }
 
 interface WeightedHookOutcome {
@@ -304,6 +313,14 @@ function formatSellReward(shellReward: number, charmReward: number): string {
   return shellText;
 }
 
+function formatSellEvents(messages: readonly string[]): string {
+  if (messages.length < 1) {
+    return '';
+  }
+
+  return `在售卖过程中遇到了如下事件：\n- ${messages.join('\n- ')}`;
+}
+
 function hasAnyFishingItem(inventory: FishingInventory): boolean {
   return fishingItems.some((item) => inventory[item.kind] > 0);
 }
@@ -404,22 +421,66 @@ export const FishingPlugin = definePlugin({
       }
     };
 
-    const sellShell = (item: FishingItemMeta): number => {
+    const sellShell = (item: FishingItemMeta): SellShellResult => {
       switch (item.kind) {
-        case 'shoe':
-          return ctx.random.range(2_000, 5_000);
-        case 'underwear':
-          return ctx.random.range(8_000, 9_000);
+        case 'shoe': {
+          const baseReward = ctx.random.range(2_000, 5_000);
+          const footFanOutcome = ctx.random.weightedPick(
+            [
+              { kind: 'footFan', weight: SPECIAL_SELL_EVENT_CHANCE_WEIGHT },
+              { kind: 'normal', weight: SPECIAL_SELL_EVENT_NORMAL_WEIGHT },
+            ],
+            (item) => item.weight,
+          );
+
+          if (footFanOutcome.kind === 'normal') {
+            return { shellReward: baseReward };
+          }
+
+          const multiplier = ctx.random.range(
+            SPECIAL_SELL_EVENT_MIN_MULTIPLIER,
+            SPECIAL_SELL_EVENT_MAX_MULTIPLIER,
+          );
+
+          return {
+            shellReward: baseReward * multiplier,
+            message: `遇见神秘的足控，破鞋增值到${multiplier}倍`,
+          };
+        }
+        case 'underwear': {
+          const baseReward = ctx.random.range(8_000, 9_000);
+          const collectorOutcome = ctx.random.weightedPick(
+            [
+              { kind: 'collector', weight: SPECIAL_SELL_EVENT_CHANCE_WEIGHT },
+              { kind: 'normal', weight: SPECIAL_SELL_EVENT_NORMAL_WEIGHT },
+            ],
+            (item) => item.weight,
+          );
+
+          if (collectorOutcome.kind === 'normal') {
+            return { shellReward: baseReward };
+          }
+
+          const multiplier = ctx.random.range(
+            SPECIAL_SELL_EVENT_MIN_MULTIPLIER,
+            SPECIAL_SELL_EVENT_MAX_MULTIPLIER,
+          );
+
+          return {
+            shellReward: baseReward * multiplier,
+            message: `遇见神秘的内衣收藏家，内衣增值到${multiplier}倍`,
+          };
+        }
         case 'seashell':
-          return ctx.random.range(15_000, 20_000);
+          return { shellReward: ctx.random.range(15_000, 20_000) };
         case 'frog':
-          return ctx.random.range(38_000, 45_000);
+          return { shellReward: ctx.random.range(38_000, 45_000) };
         case 'yellowFish':
-          return ctx.random.range(50_000, 60_000);
+          return { shellReward: ctx.random.range(50_000, 60_000) };
         case 'octopus':
-          return ctx.random.range(58_000, 65_000);
+          return { shellReward: ctx.random.range(58_000, 65_000) };
         case 'whale':
-          return 100_000;
+          return { shellReward: 100_000 };
         case 'electricEel': {
           const outcome = ctx.random.weightedPick(
             [
@@ -429,14 +490,19 @@ export const FishingPlugin = definePlugin({
             (item) => item.weight,
           );
 
-          return outcome.kind === 'reward'
-            ? ctx.random.range(80_000, 120_000)
-            : -68_800;
+          if (outcome.kind === 'reward') {
+            return { shellReward: ctx.random.range(80_000, 120_000) };
+          }
+
+          return {
+            shellReward: -68_800,
+            message: '电鳗把你电到了',
+          };
         }
         case 'diamondRing':
-          return 180_000;
+          return { shellReward: 180_000 };
         case 'crown':
-          return 300_000;
+          return { shellReward: 300_000 };
       }
     };
 
@@ -594,7 +660,7 @@ export const FishingPlugin = definePlugin({
           };
         }
 
-        const shellReward = sellShell(item);
+        const shellResult = sellShell(item);
         const charmReward = sellCharm(item);
         const nextInventory = await adjustInventoryIn(trx, userId, {
           [item.kind]: -1,
@@ -604,7 +670,7 @@ export const FishingPlugin = definePlugin({
           ctx.currency,
           userId,
           {
-            shell: shellReward,
+            shell: shellResult.shellReward,
             charm: charmReward,
           },
         );
@@ -615,6 +681,7 @@ export const FishingPlugin = definePlugin({
           balance: nextBalance,
           shellReward: shellDelta(balance, nextBalance),
           charmReward,
+          message: shellResult.message,
         };
       });
     };
@@ -637,7 +704,7 @@ export const FishingPlugin = definePlugin({
         let shellReward = 0;
         let charmReward = 0;
         let soldCount = 0;
-        let electricEelShockCount = 0;
+        const messages: string[] = [];
         const soldItems = formatInventory(inventory);
 
         for (const item of fishingItems) {
@@ -650,12 +717,12 @@ export const FishingPlugin = definePlugin({
           soldCount += count;
 
           for (let i = 0; i < count; i++) {
-            const itemShellReward = sellShell(item);
-            if (item.kind === 'electricEel' && itemShellReward < 0) {
-              electricEelShockCount++;
+            const itemShellResult = sellShell(item);
+            if (itemShellResult.message) {
+              messages.push(itemShellResult.message);
             }
 
-            shellReward += itemShellReward;
+            shellReward += itemShellResult.shellReward;
             charmReward += sellCharm(item);
           }
         }
@@ -683,7 +750,7 @@ export const FishingPlugin = definePlugin({
           charmReward,
           soldCount,
           soldItems,
-          electricEelShockCount,
+          messages,
         };
       });
     };
@@ -888,7 +955,7 @@ ${seg.mention(message.sender_id)}
 ${seg.mention(message.sender_id)}
 成功售卖所有收获，共${result.soldCount}个
 ${result.soldItems}
-${result.electricEelShockCount > 0 ? `被电鳗电到了${result.electricEelShockCount}次` : ''}
+${formatSellEvents(result.messages)}
 ${formatSellReward(result.shellReward, result.charmReward)}
 当前微壳：${result.balance.shell}
 当前魅力：${result.balance.charm}
@@ -917,11 +984,9 @@ ${seg.mention(message.sender_id)}
 
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
-${
-  result.shellReward < 0 && item.kind === 'electricEel'
-    ? `电鳗把你电到了`
-    : `成功售卖了${item.emoji}${item.name}`
-}，${formatSellReward(result.shellReward, result.charmReward)}
+成功售卖了${item.emoji}${item.name}
+${formatSellEvents(result.message ? [result.message] : [])}
+${formatSellReward(result.shellReward, result.charmReward)}
 当前微壳：${result.balance.shell}
 当前魅力：${result.balance.charm}
         `);
