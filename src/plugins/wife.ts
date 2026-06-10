@@ -69,3 +69,5 @@ ${wifeName}(${wife.user_id})
     });
   },
 });
+
+export default WifePlugin;

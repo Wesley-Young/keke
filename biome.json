@@ -36,7 +36,9 @@
           "options": {
             "groups": [
               [":PACKAGE:"],
+              ":BLANK_LINE:",
               [":ALIAS:", ":PATH:"],
+              ":BLANK_LINE:",
               [":BUN:", ":NODE:"]
             ]
           }
