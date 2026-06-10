@@ -336,7 +336,7 @@ export const FishingPlugin = definePlugin({
       const outcomes: readonly WeightedHookOutcome[] =
         charm >= CHARM_HOOK_THRESHOLD
           ? [
-              { outcome: 'hooked', weight: 1 },
+              { outcome: 'hooked', weight: 3 },
               { outcome: 'empty', weight: 1 },
             ]
           : [
