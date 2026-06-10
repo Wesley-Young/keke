@@ -80,6 +80,21 @@ interface SellShellResult {
   message?: string;
 }
 
+interface SellFishRequest {
+  item: FishingItemMeta;
+  count: number;
+}
+
+type SellFishTextParseResult =
+  | {
+      ok: true;
+      requests: SellFishRequest[];
+    }
+  | {
+      ok: false;
+      reason: string;
+    };
+
 interface WeightedHookOutcome {
   outcome: 'hooked' | 'empty' | 'yarn';
   weight: number;
@@ -147,6 +162,10 @@ const fishingItems: readonly FishingItemMeta[] = [
 
 const fishingItemByKind = new Map(
   fishingItems.map((item) => [item.kind, item]),
+);
+
+const fishingItemsByNameLength = [...fishingItems].sort(
+  (left, right) => right.name.length - left.name.length,
 );
 
 function createEmptyInventory(): FishingInventory {
@@ -325,6 +344,69 @@ function formatSellCurrencyChanges(
 
 function hasAnyFishingItem(inventory: FishingInventory): boolean {
   return fishingItems.some((item) => inventory[item.kind] > 0);
+}
+
+function parseSellFishText(text: string): SellFishTextParseResult {
+  const input = text.trim();
+  if (input.length < 1) {
+    return {
+      ok: false,
+      reason: '请告诉我要卖什么，例如【卖鱼 青蛙】或【卖鱼 青蛙1 电鳗2】',
+    };
+  }
+
+  const countsByKind = new Map<FishingItemKind, number>();
+  let offset = 0;
+
+  while (offset < input.length) {
+    const spaceMatch = /^\s+/.exec(input.slice(offset));
+    if (spaceMatch) {
+      offset += spaceMatch[0].length;
+      continue;
+    }
+
+    const item = fishingItemsByNameLength.find((item) =>
+      input.startsWith(item.name, offset),
+    );
+    if (!item) {
+      return {
+        ok: false,
+        reason: `没有找到这个种类：${input.slice(offset).trim()}`,
+      };
+    }
+
+    offset += item.name.length;
+
+    const countStartMatch = /^\s*/.exec(input.slice(offset));
+    const countStart =
+      offset + (countStartMatch ? countStartMatch[0].length : 0);
+    const countMatch = /^\d+/.exec(input.slice(countStart));
+    let count = 1;
+
+    if (countMatch) {
+      count = Number(countMatch[0]);
+      offset = countStart + countMatch[0].length;
+    }
+
+    if (!Number.isSafeInteger(count) || count <= 0) {
+      return {
+        ok: false,
+        reason: `${item.emoji}${item.name}的数量需要是正整数`,
+      };
+    }
+
+    countsByKind.set(item.kind, (countsByKind.get(item.kind) ?? 0) + count);
+  }
+
+  const requests = fishingItems.flatMap((item) => {
+    const count = countsByKind.get(item.kind);
+    return count === undefined ? [] : [{ item, count }];
+  });
+
+  return {
+    ok: true,
+    requests,
+  };
 }
 
 async function addCurrencySafelyIn(
@@ -529,6 +611,75 @@ export class FishingService {
         shellReward: shellDelta(balance, nextBalance),
         charmReward,
         message: shellResult.message,
+      };
+    });
+  }
+
+  async sellFishBatch(userId: number, requests: readonly SellFishRequest[]) {
+    return this.db.kysely.transaction().execute(async (trx) => {
+      await ensureInventoryRow(trx, userId);
+
+      const inventory = await getInventoryIn(trx, userId);
+      const balance = await this.currency.getIn(trx, userId);
+      for (const { item, count } of requests) {
+        if (inventory[item.kind] < count) {
+          return {
+            ok: false as const,
+            item,
+            requestedCount: count,
+            inventory,
+            balance,
+          };
+        }
+      }
+
+      const inventoryPatch: FishingInventoryPatch = {};
+      let shellReward = 0;
+      let charmReward = 0;
+      let soldCount = 0;
+      const soldInventory = createEmptyInventory();
+      const messages: string[] = [];
+
+      for (const { item, count } of requests) {
+        inventoryPatch[item.kind] = (inventoryPatch[item.kind] ?? 0) - count;
+        soldInventory[item.kind] += count;
+        soldCount += count;
+
+        for (let i = 0; i < count; i++) {
+          const itemShellResult = this.sellShell(item);
+          if (itemShellResult.message) {
+            messages.push(itemShellResult.message);
+          }
+
+          shellReward += itemShellResult.shellReward;
+          charmReward += this.sellCharm(item);
+        }
+      }
+
+      const nextInventory = await adjustInventoryIn(
+        trx,
+        userId,
+        inventoryPatch,
+      );
+      const nextBalance = await addCurrencySafelyIn(
+        trx,
+        this.currency,
+        userId,
+        {
+          shell: shellReward,
+          charm: charmReward,
+        },
+      );
+
+      return {
+        ok: true as const,
+        inventory: nextInventory,
+        balance: nextBalance,
+        shellReward: shellDelta(balance, nextBalance),
+        charmReward,
+        soldCount,
+        soldItems: formatInventory(soldInventory),
+        messages,
       };
     });
   }
@@ -950,11 +1101,12 @@ ${seg.mention(message.sender_id)}
 
     ctx.router
       .command('卖鱼')
-      .arg('itemName', param.str())
-      .execute(async (session, { itemName }) => {
+      .arg('content', param.greedy())
+      .execute(async (session, { content }) => {
         const message = session.raw;
+        const sellText = content.trim();
 
-        if (itemName === '全部') {
+        if (sellText === '全部') {
           const result = await fishing.sellAllFish(message.sender_id);
           if (!result.ok) {
             await session.reply(msg`
@@ -978,29 +1130,59 @@ ${formatSellCurrencyChanges(
           return;
         }
 
-        const item = fishingItems.find((item) => item.name === itemName);
-        if (!item) {
+        const parseResult = parseSellFishText(sellText);
+        if (!parseResult.ok) {
           await session.reply(msg`
 ${seg.mention(message.sender_id)}
-没有找到这个种类：${itemName}
+${parseResult.reason}
 可以发送【查看鱼塘】看看能卖什么
           `);
           return;
         }
 
-        const result = await fishing.sellFish(message.sender_id, item);
+        if (parseResult.requests.length === 1) {
+          const [{ item, count }] = parseResult.requests;
+          if (count === 1) {
+            const result = await fishing.sellFish(message.sender_id, item);
+            if (!result.ok) {
+              await session.reply(msg`
+${seg.mention(message.sender_id)}
+你的${item.emoji}${item.name}不足
+        `);
+              return;
+            }
+
+            await session.reply(msg`
+${seg.mention(message.sender_id)}
+成功售卖了${item.emoji}${item.name}
+${formatSellEvents(result.message ? [result.message] : [])}
+${formatSellCurrencyChanges(
+  result.balance,
+  result.shellReward,
+  result.charmReward,
+)}
+        `);
+            return;
+          }
+        }
+
+        const result = await fishing.sellFishBatch(
+          message.sender_id,
+          parseResult.requests,
+        );
         if (!result.ok) {
           await session.reply(msg`
 ${seg.mention(message.sender_id)}
-你的${item.emoji}${item.name}不足
+你的${result.item.emoji}${result.item.name}不足，需要${result.requestedCount}个，当前有${result.inventory[result.item.kind]}个
         `);
           return;
         }
 
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
-成功售卖了${item.emoji}${item.name}
-${formatSellEvents(result.message ? [result.message] : [])}
+成功售卖了${result.soldCount}个收获
+${result.soldItems}
+${formatSellEvents(result.messages)}
 ${formatSellCurrencyChanges(
   result.balance,
   result.shellReward,
