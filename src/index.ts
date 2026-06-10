@@ -1,8 +1,10 @@
 import { createColoredLogHandler } from '@fraqjs/color-log';
-import { Context } from '@fraqjs/fraq';
+import { Context, filter } from '@fraqjs/fraq';
 import KyselyPlugin from '@fraqjs/plugin-kysely';
 
 import { loadConfig } from './config';
+import CurrencyPlugin from './plugins/currency';
+import SignInPlugin from './plugins/sign-in';
 import WifePlugin from './plugins/wife';
 
 const config = await loadConfig();
@@ -19,8 +21,14 @@ ctx.install(KyselyPlugin, {
   sqliteUrl: './fraq.db',
 });
 
+const keke = ctx.fork('keke', filter.group(...config.enabledGroups));
+
+// Base plugins
+keke.install(CurrencyPlugin);
+
 // Functional plugins
-ctx.install(WifePlugin);
+keke.install(SignInPlugin);
+keke.install(WifePlugin);
 
 ctx.start();
 

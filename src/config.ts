@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
 export const Config = z.object({
+  enabledGroups: z.array(z.number()),
   milky: z.object({
     url: z.url(),
     accessToken: z.string().optional(),
