@@ -4,6 +4,7 @@ import KyselyPlugin from '@fraqjs/plugin-kysely';
 import RandomPlugin from '@fraqjs/plugin-random';
 
 import { config } from './config';
+import BombPlugin from './plugins/bomb';
 import CurrencyPlugin from './plugins/currency';
 import CurrencyQuery from './plugins/currency-query';
 import DickPlugin from './plugins/dick';
@@ -27,6 +28,7 @@ ctx.install(KyselyPlugin, {
 ctx.install(RandomPlugin);
 
 const keke = ctx.fork('keke', filter.group(...config.enabledGroups));
+const official = keke.fork('official', filter.group(...config.officialGroups));
 
 // Base plugins
 keke.install(CurrencyPlugin);
@@ -39,6 +41,9 @@ keke.install(ExchangePlugin);
 keke.install(FishingPlugin);
 keke.install(SignInPlugin);
 keke.install(WifePlugin);
+
+// Functions only for official groups
+official.install(BombPlugin);
 
 ctx.start();
 
