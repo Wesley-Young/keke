@@ -5,12 +5,12 @@ import RandomPlugin from '@fraqjs/plugin-random';
 
 import { config } from './config';
 import CurrencyPlugin from './plugins/currency';
+import CurrencyQuery from './plugins/currency-query';
 import DickPlugin from './plugins/dick';
 import ExchangePlugin from './plugins/exchange';
 import FishingPlugin from './plugins/fishing';
 import NickPlugin from './plugins/nick';
 import SignInPlugin from './plugins/sign-in';
-import WealthRankingPlugin from './plugins/wealth-ranking';
 import WifePlugin from './plugins/wife';
 
 const ctx = Context.fromUrl(config.milky.url, {
@@ -33,11 +33,11 @@ keke.install(CurrencyPlugin);
 keke.install(NickPlugin);
 
 // Functional plugins
+keke.install(CurrencyQuery);
 keke.install(DickPlugin);
 keke.install(ExchangePlugin);
 keke.install(FishingPlugin);
 keke.install(SignInPlugin);
-keke.install(WealthRankingPlugin);
 keke.install(WifePlugin);
 
 ctx.start();

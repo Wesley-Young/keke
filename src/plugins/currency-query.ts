@@ -1,4 +1,4 @@
-import { definePlugin, msg } from '@fraqjs/fraq';
+import { definePlugin, msg, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
 import { CURRENCY_TABLE, CurrencyService } from './currency';
@@ -11,14 +11,35 @@ interface WealthRankingEntry {
 
 const RANKING_LIMIT = 10;
 
-export const WealthRankingPlugin = definePlugin({
-  name: 'wealth-ranking',
+export const CurrencyQuery = definePlugin({
+  name: 'currency-query',
   inject: {
     db: DatabaseService,
     currency: CurrencyService,
     nick: NickService,
   },
   apply(ctx) {
+    ctx.router.command('钱包').execute(async (session) => {
+      const message = session.raw;
+      const userId = message.sender_id;
+      const balance = await ctx.currency.get(userId);
+
+      if (!balance) {
+        await session.reply(msg`你还没有使用过机器人`);
+        return;
+      }
+
+      await session.reply(
+        msg`
+${seg.mention(userId)}
+微壳: ${balance.shell}
+体力: ${balance.stamina}
+魅力: ${balance.charm}
+炸弹: ${balance.bomb}
+        `,
+      );
+    });
+
     ctx.router.command('富豪榜').execute(async (session) => {
       const message = session.raw;
       const rows = await ctx.db.kysely
@@ -52,4 +73,4 @@ export const WealthRankingPlugin = definePlugin({
   },
 });
 
-export default WealthRankingPlugin;
+export default CurrencyQuery;
