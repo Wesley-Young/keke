@@ -114,7 +114,19 @@ function ensureRegistered(
   label: string,
 ): DickProfile {
   if (!profile) {
-    throw new Error(`${label}还没有注册牛牛`);
+    throw new Error(
+      `
+${label}还没有注册牛牛，请先发送【注册牛牛】
+
+注册后，发送【打搅】可以尝试增长你的牛牛
+发送【扣】可以尝试改变长度为负的困境
+发送【勾引/击剑/撅 @目标】可以和其他人进行对决
+-【勾引】需要[你为负/对方为正]
+-【击剑】需要[双方为正]
+-【撅】需要[你为正/对方为负]
+发送【割牛牛】可以花费10W微壳割掉你的牛牛，换取一个重新开始的机会
+    `.trim(),
+    );
   }
 
   return profile;
@@ -644,7 +656,6 @@ export const DickPlugin = definePlugin({
     const dick = new DickService(ctx.db, ctx.currency, ctx.random);
 
     ctx.provide(DickService, dick);
-
     ctx.db.schemas.register({
       name: 'dick',
       migrations: {
@@ -694,14 +705,6 @@ ${seg.mention(message.sender_id)}
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 你还没注册，请先发送【注册牛牛】
-
-注册后，发送【打搅】可以尝试增长你的牛牛
-发送【扣】可以尝试改变长度为负的困境
-发送【勾引/击剑/撅 @目标】可以和其他人进行对决
--【勾引】需要[你为负/对方为正]
--【击剑】需要[双方为正]
--【撅】需要[你为正/对方为负]
-发送【割牛牛】可以花费10W微壳割掉你的牛牛，换取一个重新开始的机会
         `);
         return;
       }
