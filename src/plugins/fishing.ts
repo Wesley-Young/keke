@@ -16,6 +16,10 @@ const MIN_STAMINA_TO_FISH = 20;
 const STAMINA_COST_MIN = 5;
 const STAMINA_COST_MAX = 20;
 const CHARM_HOOK_THRESHOLD = 5_000;
+const HIGH_CHARM_WAIT_MIN_MS = 10_000;
+const HIGH_CHARM_WAIT_MAX_MS = 20_000;
+const LOW_CHARM_WAIT_MIN_MS = 15_000;
+const LOW_CHARM_WAIT_MAX_MS = 30_000;
 const YARN_REWARD = 19_900;
 
 const fishingItemKinds = [
@@ -324,6 +328,12 @@ function shellDelta(before: CurrencyBalance, after: CurrencyBalance): number {
   return after.shell - before.shell;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
 export const FishingPlugin = definePlugin({
   name: 'fishing',
   inject: {
@@ -332,6 +342,8 @@ export const FishingPlugin = definePlugin({
     random: RandomService,
   },
   apply(ctx) {
+    const fishingUserIds = new Set<number>();
+
     const pickHookOutcome = (charm: number): 'hooked' | 'empty' | 'yarn' => {
       const outcomes: readonly WeightedHookOutcome[] =
         charm >= CHARM_HOOK_THRESHOLD
@@ -514,6 +526,7 @@ export const FishingPlugin = definePlugin({
             ok: true as const,
             outcome: 'empty' as const,
             staminaCost,
+            charm: paidBalance.charm,
             balance: paidBalance,
             inventory,
           };
@@ -528,6 +541,7 @@ export const FishingPlugin = definePlugin({
             ok: true as const,
             outcome: 'yarn' as const,
             staminaCost,
+            charm: paidBalance.charm,
             balance: nextBalance,
             inventory,
           };
@@ -558,6 +572,7 @@ export const FishingPlugin = definePlugin({
           ok: true as const,
           outcome: 'catch' as const,
           staminaCost,
+          charm: paidBalance.charm,
           catchResult,
           balance: nextBalance,
           inventory: nextInventory,
@@ -745,11 +760,18 @@ ${seg.mention(message.sender_id)}
 
     ctx.router.command('钓鱼').execute(async (session) => {
       const message = session.raw;
-      const result = await fish(message.sender_id);
+      if (fishingUserIds.has(message.sender_id)) {
+        return;
+      }
 
-      if (!result.ok) {
-        if (result.reason === 'noRod') {
-          await session.reply(msg`
+      fishingUserIds.add(message.sender_id);
+
+      try {
+        const result = await fish(message.sender_id);
+
+        if (!result.ok) {
+          if (result.reason === 'noRod') {
+            await session.reply(msg`
 ${seg.mention(message.sender_id)}
 你没有鱼竿，发送【购买鱼竿】可以花5W微壳购买
 
@@ -764,28 +786,41 @@ ${seg.mention(message.sender_id)}
 
 鱼塘里有：${formatFishPond()}
           `);
-          return;
-        }
+            return;
+          }
 
-        if (result.reason === 'noShell') {
-          await session.reply(msg`
+          if (result.reason === 'noShell') {
+            await session.reply(msg`
 ${seg.mention(message.sender_id)}
 你的微壳不足，钓鱼需要花费1W微壳购买鱼饵
 当前微壳：${result.balance.shell}
           `);
-          return;
-        }
+            return;
+          }
 
-        await session.reply(msg`
+          await session.reply(msg`
 ${seg.mention(message.sender_id)}
 你没有足够的体力来钓鱼，至少需要${MIN_STAMINA_TO_FISH}体力
 当前体力：${result.balance.stamina}
         `);
-        return;
-      }
+          return;
+        }
 
-      if (result.outcome === 'empty') {
-        await session.reply(msg`
+        await ctx.client.send_group_message_reaction({
+          group_id: message.peer_id,
+          message_seq: message.message_seq,
+          reaction: '424',
+        });
+
+        const waitMs =
+          result.charm >= CHARM_HOOK_THRESHOLD
+            ? ctx.random.range(HIGH_CHARM_WAIT_MIN_MS, HIGH_CHARM_WAIT_MAX_MS)
+            : ctx.random.range(LOW_CHARM_WAIT_MIN_MS, LOW_CHARM_WAIT_MAX_MS);
+
+        await sleep(waitMs);
+
+        if (result.outcome === 'empty') {
+          await session.reply(msg`
 ${seg.mention(message.sender_id)}
 毛线都没钓到
 花费鱼饵：${BAIT_PRICE}微壳
@@ -793,11 +828,11 @@ ${seg.mention(message.sender_id)}
 当前微壳：${result.balance.shell}
 当前体力：${result.balance.stamina}
         `);
-        return;
-      }
+          return;
+        }
 
-      if (result.outcome === 'yarn') {
-        await session.reply(msg`
+        if (result.outcome === 'yarn') {
+          await session.reply(msg`
 ${seg.mention(message.sender_id)}
 钓到了🧶毛线！自动转化为${YARN_REWARD}微壳
 花费鱼饵：${BAIT_PRICE}微壳
@@ -805,10 +840,10 @@ ${seg.mention(message.sender_id)}
 当前微壳：${result.balance.shell}
 当前体力：${result.balance.stamina}
         `);
-        return;
-      }
+          return;
+        }
 
-      await session.reply(msg`
+        await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${result.catchResult.text}
 花费鱼饵：${BAIT_PRICE}微壳
@@ -817,6 +852,9 @@ ${result.catchResult.text}
 当前微壳：${result.balance.shell}
 当前体力：${result.balance.stamina}
       `);
+      } finally {
+        fishingUserIds.delete(message.sender_id);
+      }
     });
 
     ctx.router.command('鱼库').execute(async (session) => {
