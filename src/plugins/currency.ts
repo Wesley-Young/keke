@@ -1,4 +1,4 @@
-import { definePlugin } from '@fraqjs/fraq';
+import { definePlugin, msg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
 export const currencyKinds = ['shell', 'stamina', 'charm', 'bomb'] as const;
@@ -26,6 +26,11 @@ export type CurrencyQueryRunner = Pick<
 
 export interface CurrencyAccountRow extends CurrencyBalance {
   user_id: number;
+}
+
+interface CurrencyRankingEntry {
+  userId: number;
+  amount: number;
 }
 
 declare module '@fraqjs/plugin-kysely' {
@@ -119,6 +124,19 @@ function toDelta(patch: CurrencyPatch, direction: 1 | -1): CurrencyDelta {
   }
 
   return delta;
+}
+
+function formatShellRanking(entries: CurrencyRankingEntry[]): string {
+  if (entries.length === 0) {
+    return '富豪榜暂无数据';
+  }
+
+  const lines = entries.map(
+    (entry, index) =>
+      `${index + 1}. QQ号：${entry.userId}，微壳：${entry.amount}`,
+  );
+
+  return ['微壳富豪榜 TOP 10', ...lines].join('\n');
 }
 
 export class CurrencyService {
@@ -405,7 +423,9 @@ export const CurrencyPlugin = definePlugin({
     db: DatabaseService,
   },
   apply(ctx) {
-    ctx.provide(CurrencyService, new CurrencyService(ctx.db));
+    const currency = new CurrencyService(ctx.db);
+
+    ctx.provide(CurrencyService, currency);
 
     ctx.db.schemas.register({
       name: 'currency',
@@ -433,6 +453,11 @@ export const CurrencyPlugin = definePlugin({
           },
         },
       },
+    });
+
+    ctx.router.command('富豪榜').execute(async (session) => {
+      const ranking = await currency.top('shell', 10);
+      await session.reply(msg`${formatShellRanking(ranking)}`);
     });
   },
 });
