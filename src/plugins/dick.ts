@@ -626,16 +626,23 @@ export class DickService {
     target: DickProfile,
     mode: DuelMode,
   ): void {
+    const createInvalidStateMessage = (action: string, requirement: string) =>
+      `无法[${action}]：${requirement}\n当前状态：你${formatLength(actor.length)}，对方${formatLength(target.length)}`;
+
     if (mode === 'seduce' && !(actor.length < 0 && target.length > 0)) {
-      throw new Error('当前状态不适合勾引：需要你为负、对方为正');
+      throw new Error(
+        createInvalidStateMessage('勾引', '需要你为负、对方为正'),
+      );
     }
 
     if (mode === 'fence' && !(actor.length > 0 && target.length > 0)) {
-      throw new Error('当前状态不适合击剑：需要双方都为正');
+      throw new Error(createInvalidStateMessage('击剑', '需要双方都为正'));
     }
 
     if (mode === 'top' && !(actor.length > 0 && target.length < 0)) {
-      throw new Error('当前状态不适合撅：需要你为正、对方为负');
+      throw new Error(
+        createInvalidStateMessage('撅', '需要你为正、对方为负'),
+      );
     }
   }
 }
