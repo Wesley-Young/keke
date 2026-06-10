@@ -15,6 +15,7 @@ const DUEL_REQUIRED_STAMINA = 100;
 const DUEL_ACTION_STAMINA_COST_MIN = 10;
 const DUEL_ACTION_STAMINA_COST_MAX = 20;
 const RANKING_LIMIT = 5;
+const RATE_LIMIT_MS = 60_000;
 
 type DickQueryRunner = Pick<
   DatabaseService['kysely'],
@@ -615,6 +616,31 @@ export const DickPlugin = definePlugin({
   },
   apply(ctx) {
     const dick = new DickService(ctx.db, ctx.currency, ctx.random);
+    const lastActionAtByUserId = new Map<number, number>();
+
+    const checkRateLimit = async (session: Session): Promise<boolean> => {
+      const message = session.raw;
+      const now = Date.now();
+      const lastActionAt = lastActionAtByUserId.get(message.sender_id);
+
+      if (lastActionAt !== undefined && now - lastActionAt < RATE_LIMIT_MS) {
+        if (message.message_scene === 'group') {
+          await ctx.client.send_group_message_reaction({
+            group_id: message.peer_id,
+            message_seq: message.message_seq,
+            reaction: '38',
+          });
+        }
+
+        return false;
+      }
+
+      return true;
+    };
+
+    const recordRateLimit = (userId: number): void => {
+      lastActionAtByUserId.set(userId, Date.now());
+    };
 
     ctx.provide(DickService, dick);
     ctx.db.schemas.register({
@@ -687,9 +713,14 @@ ${seg.mention(message.sender_id)}
     });
 
     ctx.router.command('打搅').execute(async (session) => {
+      if (!(await checkRateLimit(session))) {
+        return;
+      }
+
       const message = session.raw;
 
       try {
+        recordRateLimit(message.sender_id);
         const result = await dick.masturbate(message.sender_id);
 
         await session.reply(msg`
@@ -709,9 +740,14 @@ ${error instanceof Error ? error.message : '打搅失败'}
     });
 
     ctx.router.command('扣').execute(async (session) => {
+      if (!(await checkRateLimit(session))) {
+        return;
+      }
+
       const message = session.raw;
 
       try {
+        recordRateLimit(message.sender_id);
         const result = await dick.tuck(message.sender_id);
 
         await session.reply(msg`
@@ -736,9 +772,14 @@ ${error instanceof Error ? error.message : '扣失败'}
       mode: DuelMode,
       fallback: string,
     ) => {
+      if (!(await checkRateLimit(session))) {
+        return;
+      }
+
       const message = session.raw;
 
       try {
+        recordRateLimit(message.sender_id);
         const result = await dick.duel(message.sender_id, targetUserId, mode);
 
         await session.reply(msg`
