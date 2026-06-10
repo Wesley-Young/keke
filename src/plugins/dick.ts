@@ -684,6 +684,24 @@ ${seg.mention(message.sender_id)}
       `);
     });
 
+    ctx.router.command('我的牛牛').execute(async (session) => {
+      const message = session.raw;
+      const profile = await dick.get(message.sender_id);
+
+      if (!profile) {
+        await session.reply(msg`
+${seg.mention(message.sender_id)}
+你还没注册，请先发送【注册牛牛】
+        `);
+        return;
+      }
+
+      await session.reply(msg`
+${seg.mention(message.sender_id)}
+你的牛牛长度为：${formatLength(profile.length)}
+      `);
+    });
+
     ctx.router.command('割牛牛').execute(async (session) => {
       const message = session.raw;
       const result = await dick.cut(message.sender_id);
