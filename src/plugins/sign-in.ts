@@ -1,5 +1,6 @@
 import { definePlugin, msg, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
+import { RandomService } from '@fraqjs/plugin-random';
 
 import { type CurrencyBalance, CurrencyService } from './currency';
 
@@ -16,10 +17,6 @@ declare module '@fraqjs/plugin-kysely' {
   interface FraqDatabase {
     sign_in_records: SignInRecordRow;
   }
-}
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 function formatShanghaiDate(date: Date): string {
@@ -46,26 +43,6 @@ function isWeekendShanghai(date: Date): boolean {
   return weekday === 'Sat' || weekday === 'Sun';
 }
 
-function createBaseReward(): CurrencyBalance {
-  return {
-    shell: randomInt(60000, 250000),
-    stamina: randomInt(200, 600),
-    charm: randomInt(350, 1000),
-    bomb: randomInt(2, 6),
-  };
-}
-
-function addWeekendBonus(reward: CurrencyBalance, date: Date): CurrencyBalance {
-  if (!isWeekendShanghai(date)) {
-    return reward;
-  }
-
-  return {
-    ...reward,
-    shell: reward.shell + randomInt(1000, 8000),
-  };
-}
-
 function emptyReward(): CurrencyBalance {
   return {
     shell: 0,
@@ -80,8 +57,22 @@ export const SignInPlugin = definePlugin({
   inject: {
     db: DatabaseService,
     currency: CurrencyService,
+    random: RandomService,
   },
   apply(ctx) {
+    const createReward = (date: Date): CurrencyBalance => {
+      const shell =
+        ctx.random.range(60000, 250000) +
+        (isWeekendShanghai(date) ? ctx.random.range(1000, 8000) : 0);
+
+      return {
+        shell,
+        stamina: ctx.random.range(200, 600),
+        charm: ctx.random.range(350, 1000),
+        bomb: ctx.random.range(2, 6),
+      };
+    };
+
     const signIn = async (userId: number, now = new Date()) => {
       if (!Number.isSafeInteger(userId)) {
         throw new RangeError('userId must be a safe integer');
@@ -106,8 +97,8 @@ export const SignInPlugin = definePlugin({
           };
         }
 
-        const lucky = randomInt(1, 50) === 1;
-        const reward = addWeekendBonus(createBaseReward(), now);
+        const lucky = ctx.random.bool(1 / 50);
+        const reward = createReward(now);
 
         await ctx.currency.addIn(trx, userId, reward);
 

@@ -1,6 +1,7 @@
 import { createColoredLogHandler } from '@fraqjs/color-log';
 import { Context, filter } from '@fraqjs/fraq';
 import KyselyPlugin from '@fraqjs/plugin-kysely';
+import RandomPlugin from '@fraqjs/plugin-random';
 
 import { loadConfig } from './config';
 import CurrencyPlugin from './plugins/currency';
@@ -21,6 +22,7 @@ const ctx = Context.fromUrl(config.milky.url, {
 ctx.install(KyselyPlugin, {
   sqliteUrl: './fraq.db',
 });
+ctx.install(RandomPlugin);
 
 const keke = ctx.fork('keke', filter.group(...config.enabledGroups));
 

@@ -1,5 +1,6 @@
 import { definePlugin, msg, param, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
+import { RandomService } from '@fraqjs/plugin-random';
 
 import {
   type CurrencyBalance,
@@ -57,8 +58,6 @@ interface FishingItemMeta {
   kind: FishingItemKind;
   name: string;
   emoji: string;
-  sellShell: () => number;
-  sellCharm?: () => number;
 }
 
 interface CatchResult {
@@ -67,84 +66,74 @@ interface CatchResult {
   currencyPatch?: CurrencyPatch;
 }
 
+interface WeightedHookOutcome {
+  outcome: 'hooked' | 'empty' | 'yarn';
+  weight: number;
+}
+
+type WeightedCatchOutcome =
+  | { kind: 'item'; itemKind: FishingItemKind; weight: number }
+  | {
+      kind: 'rodLoss' | 'shellLoss' | 'doubleYellowFish' | 'diamondRing';
+      weight: number;
+    };
+
 const fishingItems: readonly FishingItemMeta[] = [
   {
     kind: 'shoe',
     name: '破鞋',
     emoji: '👞',
-    sellShell: () => randomInt(2_000, 5_000),
   },
   {
     kind: 'underwear',
     name: '内衣',
     emoji: '👙',
-    sellShell: () => randomInt(8_000, 9_000),
   },
   {
     kind: 'seashell',
     name: '贝壳',
     emoji: '🐚',
-    sellShell: () => randomInt(15_000, 20_000),
   },
   {
     kind: 'frog',
     name: '青蛙',
     emoji: '🐸',
-    sellShell: () => randomInt(38_000, 45_000),
   },
   {
     kind: 'yellowFish',
     name: '黄鱼',
     emoji: '🐠',
-    sellShell: () => randomInt(50_000, 60_000),
   },
   {
     kind: 'octopus',
     name: '章鱼',
     emoji: '🐙',
-    sellShell: () => randomInt(58_000, 65_000),
   },
   {
     kind: 'whale',
     name: '鲸鱼',
     emoji: '🐳',
-    sellShell: () => 100_000,
   },
   {
     kind: 'electricEel',
     name: '电鳗',
     emoji: '⚡️',
-    sellShell: () => {
-      if (randomInt(1, 2) === 1) {
-        return randomInt(80_000, 120_000);
-      }
-
-      return -68_800;
-    },
   },
   {
     kind: 'diamondRing',
     name: '钻戒',
     emoji: '💎',
-    sellShell: () => 180_000,
-    sellCharm: () => randomInt(50, 150),
   },
   {
     kind: 'crown',
     name: '皇冠',
     emoji: '👑',
-    sellShell: () => 300_000,
-    sellCharm: () => randomInt(151, 250),
   },
 ];
 
 const fishingItemByKind = new Map(
   fishingItems.map((item) => [item.kind, item]),
 );
-
-function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
-}
 
 function createEmptyInventory(): FishingInventory {
   return {
@@ -263,23 +252,6 @@ async function adjustInventoryIn(
   return next;
 }
 
-function pickHookOutcome(charm: number): 'hooked' | 'empty' | 'yarn' {
-  if (charm >= CHARM_HOOK_THRESHOLD) {
-    return randomInt(1, 2) === 1 ? 'hooked' : 'empty';
-  }
-
-  const roll = randomInt(1, 4);
-  if (roll === 1 || roll === 4) {
-    return 'hooked';
-  }
-
-  if (roll === 3) {
-    return 'yarn';
-  }
-
-  return 'empty';
-}
-
 function addItemResult(kind: FishingItemKind, count = 1): CatchResult {
   const item = fishingItemByKind.get(kind);
   if (!item) {
@@ -295,55 +267,6 @@ function addItemResult(kind: FishingItemKind, count = 1): CatchResult {
       [kind]: count,
     },
   };
-}
-
-function pickCatchResult(currentShell: number): CatchResult {
-  const roll = randomInt(1, 14);
-
-  switch (roll) {
-    case 1:
-      return addItemResult('shoe');
-    case 2:
-      return addItemResult('underwear');
-    case 3:
-      return addItemResult('seashell');
-    case 4:
-      return addItemResult('frog');
-    case 5:
-      return addItemResult('yellowFish');
-    case 6:
-      return {
-        text: '遇到霉运，起竿的时候鱼竿损坏了',
-        inventoryPatch: {
-          rod: -1,
-        },
-      };
-    case 7:
-      return addItemResult('octopus');
-    case 8:
-      return addItemResult('whale');
-    case 9:
-      return addItemResult('electricEel');
-    case 10:
-      return addItemResult('diamondRing');
-    case 11:
-      return addItemResult('crown');
-    case 12: {
-      const loss = Math.min(currentShell, randomInt(500, 2_000));
-      return {
-        text: `遇到霉运，起竿的时候掉了${loss}微壳`,
-        currencyPatch: {
-          shell: -loss,
-        },
-      };
-    }
-    case 13:
-      return addItemResult('yellowFish', 2);
-    case 14:
-      return addItemResult('diamondRing');
-  }
-
-  throw new Error(`Unexpected catch roll: ${roll}`);
 }
 
 function repeatString(str: string, count: number): string {
@@ -406,8 +329,116 @@ export const FishingPlugin = definePlugin({
   inject: {
     db: DatabaseService,
     currency: CurrencyService,
+    random: RandomService,
   },
   apply(ctx) {
+    const pickHookOutcome = (charm: number): 'hooked' | 'empty' | 'yarn' => {
+      const outcomes: readonly WeightedHookOutcome[] =
+        charm >= CHARM_HOOK_THRESHOLD
+          ? [
+              { outcome: 'hooked', weight: 1 },
+              { outcome: 'empty', weight: 1 },
+            ]
+          : [
+              { outcome: 'hooked', weight: 2 },
+              { outcome: 'empty', weight: 1 },
+              { outcome: 'yarn', weight: 1 },
+            ];
+
+      return ctx.random.weightedPick(outcomes, (item) => item.weight).outcome;
+    };
+
+    const pickCatchResult = (currentShell: number): CatchResult => {
+      const outcome = ctx.random.weightedPick(
+        [
+          { kind: 'item', itemKind: 'shoe', weight: 1 },
+          { kind: 'item', itemKind: 'underwear', weight: 1 },
+          { kind: 'item', itemKind: 'seashell', weight: 1 },
+          { kind: 'item', itemKind: 'frog', weight: 1 },
+          { kind: 'item', itemKind: 'yellowFish', weight: 1 },
+          { kind: 'item', itemKind: 'octopus', weight: 1 },
+          { kind: 'item', itemKind: 'whale', weight: 1 },
+          { kind: 'item', itemKind: 'electricEel', weight: 1 },
+          { kind: 'item', itemKind: 'diamondRing', weight: 1 },
+          { kind: 'item', itemKind: 'crown', weight: 1 },
+          { kind: 'rodLoss', weight: 1 },
+          { kind: 'shellLoss', weight: 1 },
+          { kind: 'doubleYellowFish', weight: 1 },
+        ] satisfies readonly WeightedCatchOutcome[],
+        (item) => item.weight,
+      );
+
+      switch (outcome.kind) {
+        case 'item':
+          return addItemResult(outcome.itemKind);
+        case 'rodLoss':
+          return {
+            text: '遇到霉运，起竿的时候鱼竿损坏了',
+            inventoryPatch: {
+              rod: -1,
+            },
+          };
+        case 'shellLoss': {
+          const loss = Math.min(currentShell, ctx.random.range(500, 2_000));
+          return {
+            text: `遇到霉运，起竿的时候掉了${loss}微壳`,
+            currencyPatch: {
+              shell: -loss,
+            },
+          };
+        }
+        case 'doubleYellowFish':
+          return addItemResult('yellowFish', 2);
+      }
+    };
+
+    const sellShell = (item: FishingItemMeta): number => {
+      switch (item.kind) {
+        case 'shoe':
+          return ctx.random.range(2_000, 5_000);
+        case 'underwear':
+          return ctx.random.range(8_000, 9_000);
+        case 'seashell':
+          return ctx.random.range(15_000, 20_000);
+        case 'frog':
+          return ctx.random.range(38_000, 45_000);
+        case 'yellowFish':
+          return ctx.random.range(50_000, 60_000);
+        case 'octopus':
+          return ctx.random.range(58_000, 65_000);
+        case 'whale':
+          return 100_000;
+        case 'electricEel': {
+          const outcome = ctx.random.weightedPick(
+            [
+              { kind: 'reward', weight: 1 },
+              { kind: 'shock', weight: 1 },
+            ],
+            (item) => item.weight,
+          );
+
+          return outcome.kind === 'reward'
+            ? ctx.random.range(80_000, 120_000)
+            : -68_800;
+        }
+        case 'diamondRing':
+          return 180_000;
+        case 'crown':
+          return 300_000;
+      }
+    };
+
+    const sellCharm = (item: FishingItemMeta): number => {
+      switch (item.kind) {
+        case 'diamondRing':
+          return ctx.random.range(50, 150);
+        case 'crown':
+          return ctx.random.range(151, 250);
+        default:
+          return 0;
+      }
+    };
+
     const buyRod = async (userId: number) => {
       return ctx.db.kysely.transaction().execute(async (trx) => {
         const balance = await ctx.currency.getIn(trx, userId);
@@ -468,7 +499,10 @@ export const FishingPlugin = definePlugin({
           };
         }
 
-        const staminaCost = randomInt(STAMINA_COST_MIN, STAMINA_COST_MAX);
+        const staminaCost = ctx.random.range(
+          STAMINA_COST_MIN,
+          STAMINA_COST_MAX,
+        );
         const paidBalance = await ctx.currency.spendIn(trx, userId, {
           shell: BAIT_PRICE,
           stamina: staminaCost,
@@ -545,8 +579,8 @@ export const FishingPlugin = definePlugin({
           };
         }
 
-        const shellReward = item.sellShell();
-        const charmReward = item.sellCharm?.() ?? 0;
+        const shellReward = sellShell(item);
+        const charmReward = sellCharm(item);
         const nextInventory = await adjustInventoryIn(trx, userId, {
           [item.kind]: -1,
         });
@@ -601,13 +635,13 @@ export const FishingPlugin = definePlugin({
           soldCount += count;
 
           for (let i = 0; i < count; i++) {
-            const itemShellReward = item.sellShell();
+            const itemShellReward = sellShell(item);
             if (item.kind === 'electricEel' && itemShellReward < 0) {
               electricEelShockCount++;
             }
 
             shellReward += itemShellReward;
-            charmReward += item.sellCharm?.() ?? 0;
+            charmReward += sellCharm(item);
           }
         }
 
