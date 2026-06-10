@@ -16,6 +16,7 @@ const DUEL_ACTION_STAMINA_COST_MIN = 10;
 const DUEL_ACTION_STAMINA_COST_MAX = 20;
 const RANKING_LIMIT = 5;
 const RATE_LIMIT_MS = 60_000;
+const RATE_LIMIT_REACTION = '38';
 
 type DickQueryRunner = Pick<
   DatabaseService['kysely'],
@@ -77,6 +78,16 @@ interface DuelOutcome {
 declare module '@fraqjs/plugin-kysely' {
   interface FraqDatabase {
     dick_profiles: DickProfileRow;
+  }
+}
+
+export class DickRateLimitError extends Error {
+  constructor(
+    readonly userId: number,
+    readonly retryAfterMs: number,
+  ) {
+    super('Dick action rate limited');
+    this.name = 'DickRateLimitError';
   }
 }
 
@@ -237,6 +248,8 @@ const duelOutcomes: readonly DuelOutcome[] = [
 ];
 
 export class DickService {
+  private readonly lastActionAtByUserId = new Map<number, number>();
+
   constructor(
     private readonly db: DatabaseService,
     private readonly currency: CurrencyService,
@@ -342,12 +355,15 @@ export class DickService {
   }
 
   async masturbate(userId: number): Promise<LengthChangeResult> {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       const profile = ensureRegistered(await this.getIn(trx, userId), '你');
       if (profile.length <= 0) {
         throw new Error('请问它在哪里？\n试着说【扣】');
       }
 
+      this.consumeRateLimit(userId);
       const staminaCost = this.random.range(
         SINGLE_ACTION_STAMINA_COST_MIN,
         SINGLE_ACTION_STAMINA_COST_MAX,
@@ -409,12 +425,15 @@ export class DickService {
   }
 
   async tuck(userId: number): Promise<LengthChangeResult> {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       const profile = ensureRegistered(await this.getIn(trx, userId), '你');
       if (profile.length >= 0) {
         throw new Error('不是哥们，这……\n试着说【打搅】');
       }
 
+      this.consumeRateLimit(userId);
       const staminaCost = this.random.range(
         SINGLE_ACTION_STAMINA_COST_MIN,
         SINGLE_ACTION_STAMINA_COST_MAX,
@@ -517,6 +536,8 @@ export class DickService {
         );
       }
 
+      this.consumeRateLimit(actorUserId);
+
       const outcome = this.random.weightedPick(
         duelOutcomes,
         (item) => item.weight,
@@ -560,6 +581,20 @@ export class DickService {
         targetStaminaLeft: nextTargetBalance.stamina,
       };
     });
+  }
+
+  private consumeRateLimit(userId: number): void {
+    const now = Date.now();
+    const lastActionAt = this.lastActionAtByUserId.get(userId);
+
+    if (lastActionAt !== undefined) {
+      const elapsedMs = now - lastActionAt;
+      if (elapsedMs < RATE_LIMIT_MS) {
+        throw new DickRateLimitError(userId, RATE_LIMIT_MS - elapsedMs);
+      }
+    }
+
+    this.lastActionAtByUserId.set(userId, now);
   }
 
   private async setLengthIn(
@@ -616,30 +651,25 @@ export const DickPlugin = definePlugin({
   },
   apply(ctx) {
     const dick = new DickService(ctx.db, ctx.currency, ctx.random);
-    const lastActionAtByUserId = new Map<number, number>();
 
-    const checkRateLimit = async (session: Session): Promise<boolean> => {
-      const message = session.raw;
-      const now = Date.now();
-      const lastActionAt = lastActionAtByUserId.get(message.sender_id);
-
-      if (lastActionAt !== undefined && now - lastActionAt < RATE_LIMIT_MS) {
-        if (message.message_scene === 'group') {
-          await ctx.client.send_group_message_reaction({
-            group_id: message.peer_id,
-            message_seq: message.message_seq,
-            reaction: '38',
-          });
-        }
-
+    const reactToRateLimit = async (
+      session: Session,
+      error: unknown,
+    ): Promise<boolean> => {
+      if (!(error instanceof DickRateLimitError)) {
         return false;
       }
 
-      return true;
-    };
+      const message = session.raw;
+      if (message.message_scene === 'group') {
+        await ctx.client.send_group_message_reaction({
+          group_id: message.peer_id,
+          message_seq: message.message_seq,
+          reaction: RATE_LIMIT_REACTION,
+        });
+      }
 
-    const recordRateLimit = (userId: number): void => {
-      lastActionAtByUserId.set(userId, Date.now());
+      return true;
     };
 
     ctx.provide(DickService, dick);
@@ -731,14 +761,9 @@ ${seg.mention(message.sender_id)}
     });
 
     ctx.router.command('打搅').execute(async (session) => {
-      if (!(await checkRateLimit(session))) {
-        return;
-      }
-
       const message = session.raw;
 
       try {
-        recordRateLimit(message.sender_id);
         const result = await dick.masturbate(message.sender_id);
 
         await session.reply(msg`
@@ -750,6 +775,10 @@ ${result.detail}
 剩余体力：${result.staminaLeft}
         `);
       } catch (error) {
+        if (await reactToRateLimit(session, error)) {
+          return;
+        }
+
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${error instanceof Error ? error.message : '打搅失败'}
@@ -758,14 +787,9 @@ ${error instanceof Error ? error.message : '打搅失败'}
     });
 
     ctx.router.command('扣').execute(async (session) => {
-      if (!(await checkRateLimit(session))) {
-        return;
-      }
-
       const message = session.raw;
 
       try {
-        recordRateLimit(message.sender_id);
         const result = await dick.tuck(message.sender_id);
 
         await session.reply(msg`
@@ -777,6 +801,10 @@ ${result.detail}
 剩余体力：${result.staminaLeft}
         `);
       } catch (error) {
+        if (await reactToRateLimit(session, error)) {
+          return;
+        }
+
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${error instanceof Error ? error.message : '扣失败'}
@@ -790,14 +818,9 @@ ${error instanceof Error ? error.message : '扣失败'}
       mode: DuelMode,
       fallback: string,
     ) => {
-      if (!(await checkRateLimit(session))) {
-        return;
-      }
-
       const message = session.raw;
 
       try {
-        recordRateLimit(message.sender_id);
         const result = await dick.duel(message.sender_id, targetUserId, mode);
 
         await session.reply(msg`
@@ -810,6 +833,10 @@ ${result.detail}
 剩余体力：你${result.actorStaminaLeft}/对方${result.targetStaminaLeft}
         `);
       } catch (error) {
+        if (await reactToRateLimit(session, error)) {
+          return;
+        }
+
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${error instanceof Error ? error.message : fallback}
