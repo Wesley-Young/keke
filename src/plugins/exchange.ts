@@ -1,7 +1,11 @@
 import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
-import { type CurrencyBalance, CurrencyService } from './currency';
+import {
+  type CurrencyBalance,
+  CurrencyService,
+  formatCurrencyChange,
+} from './currency';
 
 type ExchangeTarget = 'stamina' | 'charm';
 
@@ -127,9 +131,8 @@ ${seg.mention(message.sender_id)}
       await session.reply(msg`
 ${seg.mention(message.sender_id)}
 成功购买${result.amount}${rate.label}
-花费微壳：${result.cost}
-当前微壳：${result.balance.shell}
-当前${rate.label}：${result.balance[target]}
+${formatCurrencyChange('微壳', result.balance.shell, -result.cost)}
+${formatCurrencyChange(rate.label, result.balance[target], result.amount)}
       `);
     };
 

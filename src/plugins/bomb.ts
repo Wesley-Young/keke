@@ -2,7 +2,11 @@ import { definePlugin, msg, param, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
-import { type CurrencyBalance, CurrencyService } from './currency';
+import {
+  type CurrencyBalance,
+  CurrencyService,
+  formatCurrencyChange,
+} from './currency';
 
 const BOMB_PRICE = 50_000;
 const MIN_TARGET_SHELL = 50_000;
@@ -446,9 +450,8 @@ ${seg.mention(message.sender_id)}
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 购买成功
-花费微壳：${result.cost}
-当前微壳：${result.balance.shell}
-当前炸弹：${result.balance.bomb}
+${formatCurrencyChange('微壳', result.balance.shell, -result.cost)}
+${formatCurrencyChange('炸弹', result.balance.bomb, amount)}
         `);
       });
 
@@ -467,13 +470,11 @@ ${seg.mention(message.sender_id)}
 ${seg.mention(message.sender_id)}
 轰炸成功！
 目标档位：${result.tier.label}
-抢走微壳：${result.shellStolen}
-你的消耗：${result.actorStaminaLoss}体力/${result.actorCharmLoss}魅力
 对方损失：${result.targetStaminaLoss}体力/${result.targetCharmLoss}魅力
-当前微壳：${result.actor.shell}
-当前体力：${result.actor.stamina}
-当前魅力：${result.actor.charm}
-当前炸弹：${result.actor.bomb}
+${formatCurrencyChange('微壳', result.actor.shell, result.shellStolen)}
+${formatCurrencyChange('体力', result.actor.stamina, -result.actorStaminaLoss)}
+${formatCurrencyChange('魅力', result.actor.charm, -result.actorCharmLoss)}
+${formatCurrencyChange('炸弹', result.actor.bomb, -1)}
             `);
             return;
           }
@@ -497,14 +498,11 @@ ${seg.mention(message.sender_id)}
 ${seg.mention(message.sender_id)}
 炸弹反噬！
 目标档位：${result.tier.label}
-损失微壳：${result.shellLoss}
-损失体力：${result.actorStaminaLoss}
-损失魅力：${result.actorCharmLoss}
 反噬禁言：${muteOk ? formatMinutes(result.muteSeconds) : '未生效'}
-当前微壳：${result.actor.shell}
-当前体力：${result.actor.stamina}
-当前魅力：${result.actor.charm}
-当前炸弹：${result.actor.bomb}
+${formatCurrencyChange('微壳', result.actor.shell, -result.shellLoss)}
+${formatCurrencyChange('体力', result.actor.stamina, -result.actorStaminaLoss)}
+${formatCurrencyChange('魅力', result.actor.charm, -result.actorCharmLoss)}
+${formatCurrencyChange('炸弹', result.actor.bomb, -1)}
           `);
         } catch (error) {
           if (error instanceof BombRateLimitError) {

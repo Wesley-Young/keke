@@ -2,7 +2,11 @@ import { definePlugin, msg, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
-import { type CurrencyBalance, CurrencyService } from './currency';
+import {
+  type CurrencyBalance,
+  CurrencyService,
+  formatCurrencyChange,
+} from './currency';
 
 const SIGN_IN_TABLE = 'sign_in_records' as const;
 const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
@@ -91,8 +95,8 @@ export const SignInPlugin = definePlugin({
         if (existing) {
           return {
             date,
-            alreadySignedIn: true,
-            lucky: false,
+            alreadySignedIn: true as const,
+            lucky: false as const,
             reward: emptyReward(),
           };
         }
@@ -100,7 +104,7 @@ export const SignInPlugin = definePlugin({
         const lucky = ctx.random.bool(1 / 50);
         const reward = createReward(now);
 
-        await ctx.currency.addIn(trx, userId, reward);
+        const balance = await ctx.currency.addIn(trx, userId, reward);
 
         if (!lucky) {
           await trx
@@ -115,8 +119,9 @@ export const SignInPlugin = definePlugin({
 
         return {
           date,
-          alreadySignedIn: false,
+          alreadySignedIn: false as const,
           lucky,
+          balance,
           reward,
         };
       });
@@ -165,10 +170,10 @@ ${seg.mention(message.sender_id)}
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 签到成功
-获得微壳：${result.reward.shell}
-获得体力：${result.reward.stamina}
-获得魅力：${result.reward.charm}
-获得炸弹：${result.reward.bomb}
+${formatCurrencyChange('微壳', result.balance.shell, result.reward.shell)}
+${formatCurrencyChange('体力', result.balance.stamina, result.reward.stamina)}
+${formatCurrencyChange('魅力', result.balance.charm, result.reward.charm)}
+${formatCurrencyChange('炸弹', result.balance.bomb, result.reward.bomb)}
 本次奖励不计入今日签到，可以再来一次
         `);
         return;
@@ -177,10 +182,10 @@ ${seg.mention(message.sender_id)}
       await session.reply(msg`
 ${seg.mention(message.sender_id)}
 签到成功
-获得微壳：${result.reward.shell}
-获得体力：${result.reward.stamina}
-获得魅力：${result.reward.charm}
-获得炸弹：${result.reward.bomb}
+${formatCurrencyChange('微壳', result.balance.shell, result.reward.shell)}
+${formatCurrencyChange('体力', result.balance.stamina, result.reward.stamina)}
+${formatCurrencyChange('魅力', result.balance.charm, result.reward.charm)}
+${formatCurrencyChange('炸弹', result.balance.bomb, result.reward.bomb)}
       `);
     });
   },

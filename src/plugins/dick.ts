@@ -2,7 +2,11 @@ import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
-import { CurrencyService } from './currency';
+import {
+  CurrencyService,
+  formatCurrencyChange,
+  formatCurrencyDelta,
+} from './currency';
 import { NickService } from './nick';
 
 const DICK_PROFILE_TABLE = 'dick_profiles' as const;
@@ -640,9 +644,7 @@ export class DickService {
     }
 
     if (mode === 'top' && !(actor.length > 0 && target.length < 0)) {
-      throw new Error(
-        createInvalidStateMessage('撅', '需要你为正、对方为负'),
-      );
+      throw new Error(createInvalidStateMessage('撅', '需要你为正、对方为负'));
     }
   }
 }
@@ -762,8 +764,8 @@ ${seg.mention(message.sender_id)}
 
       await session.reply(msg`
 ${seg.mention(message.sender_id)}
-割牛牛成功，花费100000微壳
-当前微壳：${result.shell ?? 0}
+割牛牛成功
+${formatCurrencyChange('微壳', result.shell ?? 0, -CUT_PRICE)}
       `);
     });
 
@@ -778,8 +780,7 @@ ${seg.mention(message.sender_id)}
 【${result.title}】
 ${result.detail}
 目前长度：${formatLength(result.profile.length)}
-消耗体力：${result.staminaCost}
-剩余体力：${result.staminaLeft}
+${formatCurrencyChange('体力', result.staminaLeft, -result.staminaCost)}
         `);
       } catch (error) {
         if (await reactToRateLimit(session, error)) {
@@ -804,8 +805,7 @@ ${seg.mention(message.sender_id)}
 【${result.title}】
 ${result.detail}
 目前长度：${formatLength(result.profile.length)}
-消耗体力：${result.staminaCost}
-剩余体力：${result.staminaLeft}
+${formatCurrencyChange('体力', result.staminaLeft, -result.staminaCost)}
         `);
       } catch (error) {
         if (await reactToRateLimit(session, error)) {
@@ -836,8 +836,11 @@ ${seg.mention(message.sender_id)}
 ${result.detail}
 你的长度：${formatLength(result.actor.length)}
 对方长度：${formatLength(result.target.length)}
-消耗体力：你${result.actorStaminaCost}/对方${result.targetStaminaCost}
-剩余体力：你${result.actorStaminaLeft}/对方${result.targetStaminaLeft}
+当前体力：你${result.actorStaminaLeft} (${formatCurrencyDelta(
+          -result.actorStaminaCost,
+        )})/对方${result.targetStaminaLeft} (${formatCurrencyDelta(
+          -result.targetStaminaCost,
+        )})
         `);
       } catch (error) {
         if (await reactToRateLimit(session, error)) {

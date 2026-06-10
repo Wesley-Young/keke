@@ -6,6 +6,7 @@ import {
   type CurrencyBalance,
   type CurrencyPatch,
   CurrencyService,
+  formatCurrencyChange,
 } from './currency';
 
 const FISHING_INVENTORY_TABLE = 'fishing_inventory' as const;
@@ -300,25 +301,26 @@ function formatFishPond(): string {
   return fishingItems.map((item) => `${item.emoji}${item.name}`).join(' ');
 }
 
-function formatSellReward(shellReward: number, charmReward: number): string {
-  const shellText =
-    shellReward >= 0
-      ? `奖励${shellReward}微壳`
-      : `损失${Math.abs(shellReward)}微壳`;
-
-  if (charmReward > 0) {
-    return `${shellText}，获得${charmReward}魅力`;
-  }
-
-  return shellText;
-}
-
 function formatSellEvents(messages: readonly string[]): string {
   if (messages.length < 1) {
     return '';
   }
 
   return `在售卖过程中遇到了如下事件：\n- ${messages.join('\n- ')}`;
+}
+
+function formatSellCurrencyChanges(
+  balance: CurrencyBalance,
+  shellReward: number,
+  charmReward: number,
+): string {
+  const lines = [formatCurrencyChange('微壳', balance.shell, shellReward)];
+
+  if (charmReward !== 0) {
+    lines.push(formatCurrencyChange('魅力', balance.charm, charmReward));
+  }
+
+  return lines.join('\n');
 }
 
 function hasAnyFishingItem(inventory: FishingInventory): boolean {
@@ -435,6 +437,7 @@ export class FishingService {
           outcome: 'empty' as const,
           staminaCost,
           charm: paidBalance.charm,
+          shellDelta: shellDelta(balance, paidBalance),
           balance: paidBalance,
           inventory,
         };
@@ -450,6 +453,7 @@ export class FishingService {
           outcome: 'yarn' as const,
           staminaCost,
           charm: paidBalance.charm,
+          shellDelta: shellDelta(balance, nextBalance),
           balance: nextBalance,
           inventory,
         };
@@ -482,6 +486,7 @@ export class FishingService {
         staminaCost,
         charm: paidBalance.charm,
         catchResult,
+        shellDelta: shellDelta(balance, nextBalance),
         balance: nextBalance,
         inventory: nextInventory,
       };
@@ -835,7 +840,7 @@ ${seg.mention(message.sender_id)}
 ${seg.mention(message.sender_id)}
 购买成功
 当前鱼竿：${result.inventory.rod}个
-当前微壳：${result.balance.shell}
+${formatCurrencyChange('微壳', result.balance.shell, -ROD_PRICE)}
       `);
     });
 
@@ -904,10 +909,8 @@ ${seg.mention(message.sender_id)}
           await session.reply(msg`
 ${seg.mention(message.sender_id)}
 毛线都没钓到
-花费鱼饵：${BAIT_PRICE}微壳
-花费体力：${result.staminaCost}
-当前微壳：${result.balance.shell}
-当前体力：${result.balance.stamina}
+${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
+${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
         `);
           return;
         }
@@ -916,10 +919,8 @@ ${seg.mention(message.sender_id)}
           await session.reply(msg`
 ${seg.mention(message.sender_id)}
 钓到了🧶毛线！自动转化为${YARN_REWARD}微壳
-花费鱼饵：${BAIT_PRICE}微壳
-花费体力：${result.staminaCost}
-当前微壳：${result.balance.shell}
-当前体力：${result.balance.stamina}
+${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
+${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
         `);
           return;
         }
@@ -927,11 +928,9 @@ ${seg.mention(message.sender_id)}
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${result.catchResult.text}
-花费鱼饵：${BAIT_PRICE}微壳
-花费体力：${result.staminaCost}
 当前鱼竿：${result.inventory.rod}
-当前微壳：${result.balance.shell}
-当前体力：${result.balance.stamina}
+${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
+${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
       `);
       } finally {
         fishingUserIds.delete(message.sender_id);
@@ -970,9 +969,11 @@ ${seg.mention(message.sender_id)}
 成功售卖所有收获，共${result.soldCount}个
 ${result.soldItems}
 ${formatSellEvents(result.messages)}
-${formatSellReward(result.shellReward, result.charmReward)}
-当前微壳：${result.balance.shell}
-当前魅力：${result.balance.charm}
+${formatSellCurrencyChanges(
+  result.balance,
+  result.shellReward,
+  result.charmReward,
+)}
           `);
           return;
         }
@@ -1000,9 +1001,11 @@ ${seg.mention(message.sender_id)}
 ${seg.mention(message.sender_id)}
 成功售卖了${item.emoji}${item.name}
 ${formatSellEvents(result.message ? [result.message] : [])}
-${formatSellReward(result.shellReward, result.charmReward)}
-当前微壳：${result.balance.shell}
-当前魅力：${result.balance.charm}
+${formatSellCurrencyChanges(
+  result.balance,
+  result.shellReward,
+  result.charmReward,
+)}
         `);
       });
 

@@ -58,6 +58,18 @@ function assertNonNegativeInteger(value: number, label: string): void {
   }
 }
 
+export function formatCurrencyDelta(delta: number): string {
+  return `${delta >= 0 ? '+' : ''}${delta}`;
+}
+
+export function formatCurrencyChange(
+  label: string,
+  current: number,
+  delta: number,
+): string {
+  return `当前${label}：${current} (${formatCurrencyDelta(delta)})`;
+}
+
 function assertUserId(userId: number): void {
   assertSafeInteger(userId, 'userId');
 }
