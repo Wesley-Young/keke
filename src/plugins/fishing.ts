@@ -601,7 +601,8 @@ export class FishingService {
     const outcomes: readonly WeightedHookOutcome[] =
       charm >= CHARM_HOOK_THRESHOLD
         ? [
-            { outcome: 'hooked', weight: 3 },
+            { outcome: 'hooked', weight: 4 },
+            { outcome: 'yarn', weight: 1 },
             { outcome: 'empty', weight: 1 },
           ]
         : [
