@@ -5,6 +5,7 @@ import RandomPlugin from '@fraqjs/plugin-random';
 
 import { loadConfig } from './config';
 import CurrencyPlugin from './plugins/currency';
+import DickPlugin from './plugins/dick';
 import ExchangePlugin from './plugins/exchange';
 import FishingPlugin from './plugins/fishing';
 import SignInPlugin from './plugins/sign-in';
@@ -31,6 +32,7 @@ const keke = ctx.fork('keke', filter.group(...config.enabledGroups));
 keke.install(CurrencyPlugin);
 
 // Functional plugins
+keke.install(DickPlugin);
 keke.install(ExchangePlugin);
 keke.install(FishingPlugin);
 keke.install(SignInPlugin);
