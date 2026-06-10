@@ -5,11 +5,6 @@ export const currencyKinds = ['shell', 'stamina', 'charm', 'bomb'] as const;
 
 export type CurrencyKind = (typeof currencyKinds)[number];
 
-export interface CurrencyRef {
-  groupId: number;
-  userId: number;
-}
-
 export interface CurrencyBalance {
   shell: number;
   stamina: number;
@@ -17,7 +12,7 @@ export interface CurrencyBalance {
   bomb: number;
 }
 
-export type CurrencySet = Partial<CurrencyBalance>;
+export type CurrencyPatch = Partial<CurrencyBalance>;
 export type CurrencyDelta = Partial<Record<CurrencyKind, number>>;
 
 export interface CurrencyTransferOptions {
@@ -30,7 +25,6 @@ export type CurrencyQueryRunner = Pick<
 >;
 
 export interface CurrencyAccountRow extends CurrencyBalance {
-  group_id: number;
   user_id: number;
 }
 
@@ -71,9 +65,8 @@ function assertPositiveInteger(value: number, label: string): void {
   }
 }
 
-function assertRef(ref: CurrencyRef): void {
-  assertSafeInteger(ref.groupId, 'groupId');
-  assertSafeInteger(ref.userId, 'userId');
+function assertUserId(userId: number): void {
+  assertSafeInteger(userId, 'userId');
 }
 
 function toBalance(row?: CurrencyAccountRow): CurrencyBalance {
@@ -90,7 +83,7 @@ function toBalance(row?: CurrencyAccountRow): CurrencyBalance {
 }
 
 function normalizePatch(
-  patch: CurrencySet | CurrencyDelta,
+  patch: CurrencyPatch | CurrencyDelta,
   allowNegative: boolean,
 ): Partial<CurrencyBalance> {
   const normalized: Partial<CurrencyBalance> = {};
@@ -112,100 +105,118 @@ function normalizePatch(
   return normalized;
 }
 
+function toDelta(patch: CurrencyPatch, direction: 1 | -1): CurrencyDelta {
+  const normalized = normalizePatch(patch, false);
+  const delta: CurrencyDelta = {};
+
+  for (const kind of currencyKinds) {
+    const amount = normalized[kind];
+    if (amount === undefined) {
+      continue;
+    }
+
+    delta[kind] = amount * direction;
+  }
+
+  return delta;
+}
+
 export class CurrencyService {
   constructor(private readonly db: DatabaseService) {}
 
-  async get(ref: CurrencyRef): Promise<CurrencyBalance> {
-    return this.getIn(this.db.kysely, ref);
+  async get(userId: number): Promise<CurrencyBalance> {
+    return this.getIn(this.db.kysely, userId);
   }
 
   async getIn(
     db: CurrencyQueryRunner,
-    ref: CurrencyRef,
+    userId: number,
   ): Promise<CurrencyBalance> {
-    assertRef(ref);
+    assertUserId(userId);
 
     const row = await db
       .selectFrom(CURRENCY_TABLE)
       .selectAll()
-      .where('group_id', '=', ref.groupId)
-      .where('user_id', '=', ref.userId)
+      .where('user_id', '=', userId)
       .executeTakeFirst();
 
     return toBalance(row as CurrencyAccountRow | undefined);
   }
 
-  async getOne(ref: CurrencyRef, kind: CurrencyKind): Promise<number> {
-    const balance = await this.get(ref);
+  async getOne(userId: number, kind: CurrencyKind): Promise<number> {
+    const balance = await this.get(userId);
     return balance[kind];
   }
 
   async ensure(
-    ref: CurrencyRef,
-    initial: CurrencySet = {},
+    userId: number,
+    initial: CurrencyPatch = {},
   ): Promise<CurrencyBalance> {
-    return this.ensureIn(this.db.kysely, ref, initial);
+    return this.ensureIn(this.db.kysely, userId, initial);
   }
 
   async ensureIn(
     db: CurrencyQueryRunner,
-    ref: CurrencyRef,
-    initial: CurrencySet = {},
+    userId: number,
+    initial: CurrencyPatch = {},
   ): Promise<CurrencyBalance> {
-    assertRef(ref);
+    assertUserId(userId);
     const patch = normalizePatch(initial, false);
 
     await db
       .insertInto(CURRENCY_TABLE)
       .values({
-        group_id: ref.groupId,
-        user_id: ref.userId,
+        user_id: userId,
         shell: patch.shell ?? 0,
         stamina: patch.stamina ?? 0,
         charm: patch.charm ?? 0,
         bomb: patch.bomb ?? 0,
       })
-      .onConflict((oc) => oc.columns(['group_id', 'user_id']).doNothing())
+      .onConflict((oc) => oc.column('user_id').doNothing())
       .execute();
 
-    return this.getIn(db, ref);
+    return this.getIn(db, userId);
   }
 
-  async set(ref: CurrencyRef, patch: CurrencySet): Promise<CurrencyBalance> {
+  async set(userId: number, patch: CurrencyPatch): Promise<CurrencyBalance> {
     return this.db.kysely.transaction().execute(async (trx) => {
-      await this.ensureRow(trx, ref);
-      const nextPatch = normalizePatch(patch, false);
-      if (Object.keys(nextPatch).length === 0) {
-        return this.getWith(trx, ref);
-      }
-
-      await trx
-        .updateTable(CURRENCY_TABLE)
-        .set(nextPatch)
-        .where('group_id', '=', ref.groupId)
-        .where('user_id', '=', ref.userId)
-        .execute();
-
-      return this.getWith(trx, ref);
+      return this.setIn(trx, userId, patch);
     });
   }
 
-  async adjust(
-    ref: CurrencyRef,
-    delta: CurrencyDelta,
+  async setIn(
+    db: CurrencyQueryRunner,
+    userId: number,
+    patch: CurrencyPatch,
   ): Promise<CurrencyBalance> {
+    await this.ensureRow(db, userId);
+    const nextPatch = normalizePatch(patch, false);
+    if (Object.keys(nextPatch).length === 0) {
+      return this.getIn(db, userId);
+    }
+
+    await db
+      .updateTable(CURRENCY_TABLE)
+      .set(nextPatch)
+      .where('user_id', '=', userId)
+      .execute();
+
+    return this.getIn(db, userId);
+  }
+
+  async adjust(userId: number, delta: CurrencyDelta): Promise<CurrencyBalance> {
     return this.db.kysely.transaction().execute(async (trx) => {
-      return this.adjustIn(trx, ref, delta);
+      return this.adjustIn(trx, userId, delta);
     });
   }
 
   async adjustIn(
     db: CurrencyQueryRunner,
-    ref: CurrencyRef,
+    userId: number,
     delta: CurrencyDelta,
   ): Promise<CurrencyBalance> {
-    await this.ensureRow(db, ref);
-    const current = await this.getWith(db, ref);
+    await this.ensureRow(db, userId);
+    const current = await this.getIn(db, userId);
     const patch = normalizePatch(delta, true);
     const next = { ...current };
 
@@ -219,45 +230,45 @@ export class CurrencyService {
       if (updated < 0) {
         throw new RangeError(`${kind} would become negative after adjustment`);
       }
+
       next[kind] = updated;
     }
 
     await db
       .updateTable(CURRENCY_TABLE)
       .set(next)
-      .where('group_id', '=', ref.groupId)
-      .where('user_id', '=', ref.userId)
+      .where('user_id', '=', userId)
       .execute();
 
-    return this.getWith(db, ref);
+    return this.getIn(db, userId);
   }
 
-  async add(ref: CurrencyRef, patch: CurrencySet): Promise<CurrencyBalance> {
-    return this.adjust(ref, this.toDelta(patch, 1));
+  async add(userId: number, patch: CurrencyPatch): Promise<CurrencyBalance> {
+    return this.adjust(userId, toDelta(patch, 1));
   }
 
   async addIn(
     db: CurrencyQueryRunner,
-    ref: CurrencyRef,
-    patch: CurrencySet,
+    userId: number,
+    patch: CurrencyPatch,
   ): Promise<CurrencyBalance> {
-    return this.adjustIn(db, ref, this.toDelta(patch, 1));
+    return this.adjustIn(db, userId, toDelta(patch, 1));
   }
 
-  async spend(ref: CurrencyRef, patch: CurrencySet): Promise<CurrencyBalance> {
-    return this.adjust(ref, this.toDelta(patch, -1));
+  async spend(userId: number, patch: CurrencyPatch): Promise<CurrencyBalance> {
+    return this.adjust(userId, toDelta(patch, -1));
   }
 
   async spendIn(
     db: CurrencyQueryRunner,
-    ref: CurrencyRef,
-    patch: CurrencySet,
+    userId: number,
+    patch: CurrencyPatch,
   ): Promise<CurrencyBalance> {
-    return this.adjustIn(db, ref, this.toDelta(patch, -1));
+    return this.adjustIn(db, userId, toDelta(patch, -1));
   }
 
-  async canAfford(ref: CurrencyRef, patch: CurrencySet): Promise<boolean> {
-    const current = await this.get(ref);
+  async canAfford(userId: number, patch: CurrencyPatch): Promise<boolean> {
+    const current = await this.get(userId);
     const normalized = normalizePatch(patch, false);
 
     for (const kind of currencyKinds) {
@@ -265,6 +276,7 @@ export class CurrencyService {
       if (amount === undefined) {
         continue;
       }
+
       if (current[kind] < amount) {
         return false;
       }
@@ -273,92 +285,90 @@ export class CurrencyService {
     return true;
   }
 
-  async requireEnough(ref: CurrencyRef, patch: CurrencySet): Promise<void> {
-    if (!(await this.canAfford(ref, patch))) {
+  async requireEnough(userId: number, patch: CurrencyPatch): Promise<void> {
+    if (!(await this.canAfford(userId, patch))) {
       throw new Error('Insufficient currency balance');
     }
   }
 
   async transfer(
-    from: CurrencyRef,
-    to: CurrencyRef,
-    patch: CurrencySet,
+    fromUserId: number,
+    toUserId: number,
+    patch: CurrencyPatch,
     _options: CurrencyTransferOptions = {},
   ): Promise<{ from: CurrencyBalance; to: CurrencyBalance }> {
-    assertRef(from);
-    assertRef(to);
+    return this.db.kysely.transaction().execute(async (trx) => {
+      return this.transferIn(trx, fromUserId, toUserId, patch);
+    });
+  }
 
-    if (from.groupId !== to.groupId) {
-      throw new Error(
-        'Currency transfer only supports accounts in the same group',
-      );
+  async transferIn(
+    db: CurrencyQueryRunner,
+    fromUserId: number,
+    toUserId: number,
+    patch: CurrencyPatch,
+  ): Promise<{ from: CurrencyBalance; to: CurrencyBalance }> {
+    assertUserId(fromUserId);
+    assertUserId(toUserId);
+
+    if (fromUserId === toUserId) {
+      const balance = await this.getIn(db, fromUserId);
+      return {
+        from: balance,
+        to: balance,
+      };
     }
 
     const delta = normalizePatch(patch, false);
+    await this.ensureRow(db, fromUserId);
+    await this.ensureRow(db, toUserId);
 
-    return this.db.kysely.transaction().execute(async (trx) => {
-      await this.ensureRow(trx, from);
-      await this.ensureRow(trx, to);
+    const fromCurrent = await this.getIn(db, fromUserId);
+    const toCurrent = await this.getIn(db, toUserId);
+    const nextFrom = { ...fromCurrent };
+    const nextTo = { ...toCurrent };
 
-      const fromCurrent = await this.getWith(trx, from);
-      const toCurrent = await this.getWith(trx, to);
-      const nextFrom = { ...fromCurrent };
-      const nextTo = { ...toCurrent };
-
-      for (const kind of currencyKinds) {
-        const amount = delta[kind];
-        if (amount === undefined) {
-          continue;
-        }
-
-        if (nextFrom[kind] < amount) {
-          throw new Error(`Insufficient ${kind} balance`);
-        }
-
-        nextFrom[kind] -= amount;
-        nextTo[kind] += amount;
+    for (const kind of currencyKinds) {
+      const amount = delta[kind];
+      if (amount === undefined) {
+        continue;
       }
 
-      await trx
-        .updateTable(CURRENCY_TABLE)
-        .set(nextFrom)
-        .where('group_id', '=', from.groupId)
-        .where('user_id', '=', from.userId)
-        .execute();
-
-      if (from.groupId === to.groupId && from.userId === to.userId) {
-        return {
-          from: nextFrom,
-          to: nextFrom,
-        };
+      if (nextFrom[kind] < amount) {
+        throw new Error(`Insufficient ${kind} balance`);
       }
 
-      await trx
-        .updateTable(CURRENCY_TABLE)
-        .set(nextTo)
-        .where('group_id', '=', to.groupId)
-        .where('user_id', '=', to.userId)
-        .execute();
+      nextFrom[kind] -= amount;
+      nextTo[kind] += amount;
+    }
 
-      return {
-        from: nextFrom,
-        to: nextTo,
-      };
-    });
+    await db
+      .updateTable(CURRENCY_TABLE)
+      .set(nextFrom)
+      .where('user_id', '=', fromUserId)
+      .execute();
+
+    await db
+      .updateTable(CURRENCY_TABLE)
+      .set(nextTo)
+      .where('user_id', '=', toUserId)
+      .execute();
+
+    return {
+      from: nextFrom,
+      to: nextTo,
+    };
   }
 
   async top(
     kind: CurrencyKind,
-    groupId: number,
     limit = 10,
   ): Promise<Array<{ userId: number; amount: number }>> {
-    assertSafeInteger(groupId, 'groupId');
     assertPositiveInteger(limit, 'limit');
 
     const rows = await this.db.kysely
       .selectFrom(CURRENCY_TABLE)
       .select(['user_id', kind])
-      .where('group_id', '=', groupId)
       .orderBy(kind, 'desc')
       .orderBy('user_id', 'asc')
       .limit(limit)
@@ -372,49 +382,19 @@ export class CurrencyService {
 
   private async ensureRow(
     db: CurrencyQueryRunner,
-    ref: CurrencyRef,
+    userId: number,
   ): Promise<void> {
     await db
       .insertInto(CURRENCY_TABLE)
       .values({
-        group_id: ref.groupId,
-        user_id: ref.userId,
+        user_id: userId,
         shell: 0,
         stamina: 0,
         charm: 0,
         bomb: 0,
       })
-      .onConflict((oc) => oc.columns(['group_id', 'user_id']).doNothing())
+      .onConflict((oc) => oc.column('user_id').doNothing())
       .execute();
-  }
-
-  private async getWith(
-    db: CurrencyQueryRunner,
-    ref: CurrencyRef,
-  ): Promise<CurrencyBalance> {
-    const row = await db
-      .selectFrom(CURRENCY_TABLE)
-      .selectAll()
-      .where('group_id', '=', ref.groupId)
-      .where('user_id', '=', ref.userId)
-      .executeTakeFirst();
-
-    return toBalance(row as CurrencyAccountRow | undefined);
-  }
-
-  private toDelta(patch: CurrencySet, direction: 1 | -1): CurrencyDelta {
-    const delta: CurrencyDelta = {};
-    const normalized = normalizePatch(patch, false);
-
-    for (const kind of currencyKinds) {
-      const amount = normalized[kind];
-      if (amount === undefined) {
-        continue;
-      }
-      delta[kind] = amount * direction;
-    }
-
-    return delta;
   }
 }
 
@@ -435,7 +415,6 @@ export const CurrencyPlugin = definePlugin({
             await db.schema
               .createTable(CURRENCY_TABLE)
               .ifNotExists()
-              .addColumn('group_id', 'integer', (column) => column.notNull())
               .addColumn('user_id', 'integer', (column) => column.notNull())
               .addColumn('shell', 'integer', (column) =>
                 column.notNull().defaultTo(0),
@@ -449,10 +428,7 @@ export const CurrencyPlugin = definePlugin({
               .addColumn('bomb', 'integer', (column) =>
                 column.notNull().defaultTo(0),
               )
-              .addPrimaryKeyConstraint('currency_accounts_pk', [
-                'group_id',
-                'user_id',
-              ])
+              .addPrimaryKeyConstraint('currency_accounts_pk', ['user_id'])
               .execute();
           },
         },

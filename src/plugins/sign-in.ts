@@ -1,38 +1,20 @@
 import { definePlugin, msg, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
-import {
-  type CurrencyBalance,
-  type CurrencyRef,
-  CurrencyService,
-} from './currency';
+import { type CurrencyBalance, CurrencyService } from './currency';
+
+const SIGN_IN_TABLE = 'sign_in_records' as const;
+const SHANGHAI_TIME_ZONE = 'Asia/Shanghai';
 
 export interface SignInRecordRow {
-  group_id: number;
   user_id: number;
   sign_in_date: string;
   signed_at: string;
 }
 
-export interface SignInResult {
-  date: string;
-  alreadySignedIn: boolean;
-  lucky: boolean;
-  reward: CurrencyBalance;
-}
-
 declare module '@fraqjs/plugin-kysely' {
   interface FraqDatabase {
     sign_in_records: SignInRecordRow;
-  }
-}
-
-function assertRef(ref: CurrencyRef): void {
-  if (!Number.isSafeInteger(ref.groupId)) {
-    throw new RangeError('groupId must be a safe integer');
-  }
-  if (!Number.isSafeInteger(ref.userId)) {
-    throw new RangeError('userId must be a safe integer');
   }
 }
 
@@ -42,7 +24,7 @@ function randomInt(min: number, max: number): number {
 
 function formatShanghaiDate(date: Date): string {
   const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
+    timeZone: SHANGHAI_TIME_ZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -57,7 +39,7 @@ function formatShanghaiDate(date: Date): string {
 
 function isWeekendShanghai(date: Date): boolean {
   const weekday = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Shanghai',
+    timeZone: SHANGHAI_TIME_ZONE,
     weekday: 'short',
   }).format(date);
 
@@ -84,69 +66,13 @@ function addWeekendBonus(reward: CurrencyBalance, date: Date): CurrencyBalance {
   };
 }
 
-async function signIn(
-  db: DatabaseService,
-  currency: CurrencyService,
-  ref: CurrencyRef,
-  now = new Date(),
-): Promise<SignInResult> {
-  assertRef(ref);
-  const date = formatShanghaiDate(now);
-
-  return db.kysely.transaction().execute(async (trx) => {
-    const existing = await trx
-      .selectFrom('sign_in_records' as const)
-      .selectAll()
-      .where('group_id', '=', ref.groupId)
-      .where('user_id', '=', ref.userId)
-      .where('sign_in_date', '=', date)
-      .executeTakeFirst();
-
-    if (existing) {
-      return {
-        date,
-        alreadySignedIn: true,
-        lucky: false,
-        reward: {
-          shell: 0,
-          stamina: 0,
-          charm: 0,
-          bomb: 0,
-        },
-      };
-    }
-
-    const lucky = randomInt(1, 50) === 1;
-    const baseReward = createBaseReward();
-    const reward = addWeekendBonus(baseReward, now);
-
-    await currency.addIn(trx, ref, baseReward);
-
-    if (reward.shell !== baseReward.shell) {
-      await currency.addIn(trx, ref, {
-        shell: reward.shell - baseReward.shell,
-      });
-    }
-
-    if (!lucky) {
-      await trx
-        .insertInto('sign_in_records' as const)
-        .values({
-          group_id: ref.groupId,
-          user_id: ref.userId,
-          sign_in_date: date,
-          signed_at: now.toISOString(),
-        })
-        .execute();
-    }
-
-    return {
-      date,
-      alreadySignedIn: false,
-      lucky,
-      reward,
-    };
-  });
+function emptyReward(): CurrencyBalance {
+  return {
+    shell: 0,
+    stamina: 0,
+    charm: 0,
+    bomb: 0,
+  };
 }
 
 export const SignInPlugin = definePlugin({
@@ -156,20 +82,67 @@ export const SignInPlugin = definePlugin({
     currency: CurrencyService,
   },
   apply(ctx) {
+    const signIn = async (userId: number, now = new Date()) => {
+      if (!Number.isSafeInteger(userId)) {
+        throw new RangeError('userId must be a safe integer');
+      }
+
+      const date = formatShanghaiDate(now);
+
+      return ctx.db.kysely.transaction().execute(async (trx) => {
+        const existing = await trx
+          .selectFrom(SIGN_IN_TABLE)
+          .selectAll()
+          .where('user_id', '=', userId)
+          .where('sign_in_date', '=', date)
+          .executeTakeFirst();
+
+        if (existing) {
+          return {
+            date,
+            alreadySignedIn: true,
+            lucky: false,
+            reward: emptyReward(),
+          };
+        }
+
+        const lucky = randomInt(1, 50) === 1;
+        const reward = addWeekendBonus(createBaseReward(), now);
+
+        await ctx.currency.addIn(trx, userId, reward);
+
+        if (!lucky) {
+          await trx
+            .insertInto(SIGN_IN_TABLE)
+            .values({
+              user_id: userId,
+              sign_in_date: date,
+              signed_at: now.toISOString(),
+            })
+            .execute();
+        }
+
+        return {
+          date,
+          alreadySignedIn: false,
+          lucky,
+          reward,
+        };
+      });
+    };
+
     ctx.db.schemas.register({
       name: 'signin',
       migrations: {
         '001_init_sign_in_records_table': {
           async up(db) {
             await db.schema
-              .createTable('sign_in_records' as const)
+              .createTable(SIGN_IN_TABLE)
               .ifNotExists()
-              .addColumn('group_id', 'integer', (column) => column.notNull())
               .addColumn('user_id', 'integer', (column) => column.notNull())
               .addColumn('sign_in_date', 'text', (column) => column.notNull())
               .addColumn('signed_at', 'text', (column) => column.notNull())
               .addPrimaryKeyConstraint('sign_in_records_pk', [
-                'group_id',
                 'user_id',
                 'sign_in_date',
               ])
@@ -187,10 +160,7 @@ export const SignInPlugin = definePlugin({
         return;
       }
 
-      const result = await signIn(ctx.db, ctx.currency, {
-        groupId: message.peer_id,
-        userId: message.sender_id,
-      });
+      const result = await signIn(message.sender_id);
 
       if (result.alreadySignedIn) {
         await session.reply(msg`
