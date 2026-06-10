@@ -823,7 +823,7 @@ ${error instanceof Error ? error.message : fallback}
             const user = nick
               ? `${nick}(${entry.userId})`
               : `QQ ${entry.userId}`;
-            return `#${index + 1} ${user} - ${formatLength(entry.length)}`;
+            return `#${index + 1} ${user} / ${formatLength(entry.length)}`;
           }),
         ];
       };
