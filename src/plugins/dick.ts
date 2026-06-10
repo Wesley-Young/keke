@@ -3,6 +3,7 @@ import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
 import { CurrencyService } from './currency';
+import { NickService } from './nick';
 
 const DICK_PROFILE_TABLE = 'dick_profiles' as const;
 const CUT_PRICE = 100_000;
@@ -13,6 +14,7 @@ const SINGLE_ACTION_STAMINA_COST_MAX = 20;
 const DUEL_REQUIRED_STAMINA = 100;
 const DUEL_ACTION_STAMINA_COST_MIN = 10;
 const DUEL_ACTION_STAMINA_COST_MAX = 20;
+const RANKING_LIMIT = 5;
 
 type DickQueryRunner = Pick<
   DatabaseService['kysely'],
@@ -27,6 +29,11 @@ interface DickProfileRow {
 }
 
 interface DickProfile {
+  userId: number;
+  length: number;
+}
+
+interface DickRankingEntry {
   userId: number;
   length: number;
 }
@@ -146,25 +153,6 @@ function multiplyByPercent(length: number, percent: number): number {
 
 function divideByPercent(length: number, percent: number): number {
   return Math.trunc((length * 100) / percent);
-}
-
-function formatRankingSection(
-  title: string,
-  entries: readonly DickProfile[],
-): string {
-  if (entries.length === 0) {
-    return `${title}\n暂无数据`;
-  }
-
-  return [
-    title,
-    ...entries.map(
-      (entry, index) =>
-        `${index + 1}. QQ号：${entry.userId}，长度：${formatLength(
-          entry.length,
-        )}`,
-    ),
-  ].join('\n');
 }
 
 const duelOutcomes: readonly DuelOutcome[] = [
@@ -573,34 +561,6 @@ export class DickService {
     });
   }
 
-  async ranking(): Promise<{
-    positive: DickProfile[];
-    negative: DickProfile[];
-  }> {
-    const positiveRows = await this.db.kysely
-      .selectFrom(DICK_PROFILE_TABLE)
-      .selectAll()
-      .where('length', '>', 0)
-      .orderBy('length', 'desc')
-      .orderBy('user_id', 'asc')
-      .limit(5)
-      .execute();
-
-    const negativeRows = await this.db.kysely
-      .selectFrom(DICK_PROFILE_TABLE)
-      .selectAll()
-      .where('length', '<', 0)
-      .orderBy('length', 'asc')
-      .orderBy('user_id', 'asc')
-      .limit(5)
-      .execute();
-
-    return {
-      positive: positiveRows.map((row) => toProfile(row as DickProfileRow)),
-      negative: negativeRows.map((row) => toProfile(row as DickProfileRow)),
-    };
-  }
-
   private async setLengthIn(
     db: DickQueryRunner,
     userId: number,
@@ -650,6 +610,7 @@ export const DickPlugin = definePlugin({
   inject: {
     db: DatabaseService,
     currency: CurrencyService,
+    nick: NickService,
     random: RandomService,
   },
   apply(ctx) {
@@ -818,20 +779,64 @@ ${error instanceof Error ? error.message : fallback}
         handleDuel(session, target.data.user_id, 'top', '撅失败'),
       );
 
-    const handleRanking = async (session: Session) => {
-      const ranking = await dick.ranking();
+    ctx.router.command('牛牛排行榜').execute(async (session) => {
+      const message = session.raw;
+      const positiveRows = await ctx.db.kysely
+        .selectFrom(DICK_PROFILE_TABLE)
+        .select(['user_id', 'length'])
+        .where('length', '>', 0)
+        .orderBy('length', 'desc')
+        .orderBy('user_id', 'asc')
+        .limit(RANKING_LIMIT)
+        .execute();
+      const negativeRows = await ctx.db.kysely
+        .selectFrom(DICK_PROFILE_TABLE)
+        .select(['user_id', 'length'])
+        .where('length', '<', 0)
+        .orderBy('length', 'asc')
+        .orderBy('user_id', 'asc')
+        .limit(RANKING_LIMIT)
+        .execute();
+      const positive: DickRankingEntry[] = positiveRows.map((row) => ({
+        userId: row.user_id,
+        length: row.length,
+      }));
+      const negative: DickRankingEntry[] = negativeRows.map((row) => ({
+        userId: row.user_id,
+        length: row.length,
+      }));
+      const makeLines = (
+        title: string,
+        entries: readonly DickRankingEntry[],
+      ): string[] => {
+        if (entries.length === 0) {
+          return [title, '暂无数据'];
+        }
 
-      await session.reply(msg`
-牛牛长度排行榜
-${formatRankingSection('正长度 TOP 5', ranking.positive)}
+        return [
+          title,
+          ...entries.map((entry, index) => {
+            const nick =
+              message.message_scene === 'group'
+                ? ctx.nick.resolve(message.peer_id, entry.userId)
+                : undefined;
+            const user = nick
+              ? `${nick}(${entry.userId})`
+              : `QQ ${entry.userId}`;
+            return `#${index + 1} ${user} - ${formatLength(entry.length)}`;
+          }),
+        ];
+      };
 
-${formatRankingSection('负长度 TOP 5', ranking.negative)}
-      `);
-    };
-
-    ctx.router.command('牛牛长度排行榜').execute(handleRanking);
-    ctx.router.command('牛牛排行榜').execute(handleRanking);
-    ctx.router.command('长度排行榜').execute(handleRanking);
+      await session.reply(
+        msg`${[
+          '牛牛长度排行榜',
+          ...makeLines('正长度 TOP 5', positive),
+          '---',
+          ...makeLines('负长度 TOP 5', negative),
+        ].join('\n')}`,
+      );
+    });
   },
 });
 

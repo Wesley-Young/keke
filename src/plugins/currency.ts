@@ -1,4 +1,4 @@
-import { definePlugin, msg } from '@fraqjs/fraq';
+import { definePlugin } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
 export const currencyKinds = ['shell', 'stamina', 'charm', 'bomb'] as const;
@@ -28,18 +28,13 @@ export interface CurrencyAccountRow extends CurrencyBalance {
   user_id: number;
 }
 
-interface CurrencyRankingEntry {
-  userId: number;
-  amount: number;
-}
-
 declare module '@fraqjs/plugin-kysely' {
   interface FraqDatabase {
     currency_accounts: CurrencyAccountRow;
   }
 }
 
-const CURRENCY_TABLE = 'currency_accounts' as const;
+export const CURRENCY_TABLE = 'currency_accounts' as const;
 
 function createZeroBalance(): CurrencyBalance {
   return {
@@ -60,13 +55,6 @@ function assertNonNegativeInteger(value: number, label: string): void {
   assertSafeInteger(value, label);
   if (value < 0) {
     throw new RangeError(`${label} must be greater than or equal to 0`);
-  }
-}
-
-function assertPositiveInteger(value: number, label: string): void {
-  assertSafeInteger(value, label);
-  if (value <= 0) {
-    throw new RangeError(`${label} must be greater than 0`);
   }
 }
 
@@ -124,19 +112,6 @@ function toDelta(patch: CurrencyPatch, direction: 1 | -1): CurrencyDelta {
   }
 
   return delta;
-}
-
-function formatShellRanking(entries: CurrencyRankingEntry[]): string {
-  if (entries.length === 0) {
-    return '富豪榜暂无数据';
-  }
-
-  const lines = entries.map(
-    (entry, index) =>
-      `${index + 1}. QQ号：${entry.userId}，微壳：${entry.amount}`,
-  );
-
-  return ['微壳富豪榜 TOP 10', ...lines].join('\n');
 }
 
 export class CurrencyService {
@@ -378,26 +353,6 @@ export class CurrencyService {
     };
   }
 
-  async top(
-    kind: CurrencyKind,
-    limit = 10,
-  ): Promise<Array<{ userId: number; amount: number }>> {
-    assertPositiveInteger(limit, 'limit');
-
-    const rows = await this.db.kysely
-      .selectFrom(CURRENCY_TABLE)
-      .select(['user_id', kind])
-      .orderBy(kind, 'desc')
-      .orderBy('user_id', 'asc')
-      .limit(limit)
-      .execute();
-
-    return rows.map((row) => ({
-      userId: row.user_id,
-      amount: row[kind],
-    }));
-  }
-
   private async ensureRow(
     db: CurrencyQueryRunner,
     userId: number,
@@ -453,11 +408,6 @@ export const CurrencyPlugin = definePlugin({
           },
         },
       },
-    });
-
-    ctx.router.command('富豪榜').execute(async (session) => {
-      const ranking = await currency.top('shell', 10);
-      await session.reply(msg`${formatShellRanking(ranking)}`);
     });
   },
 });

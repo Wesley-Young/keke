@@ -20,3 +20,5 @@ export async function loadConfig(): Promise<Config> {
   const configString = await readFile('config.json', 'utf-8');
   return Config.parse(JSON.parse(configString));
 }
+
+export const config = await loadConfig();
