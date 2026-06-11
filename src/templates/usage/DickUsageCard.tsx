@@ -83,10 +83,12 @@ export default function DickUsageCard() {
                 】查看当前长度
               </div>
               <div style={{ fontSize: 17 }}>
-                发送【<span style={{ fontWeight: 800 }}>打搅</span>】尝试增长牛牛
+                发送【<span style={{ fontWeight: 800 }}>打搅</span>
+                】尝试增长牛牛
               </div>
               <div style={{ fontSize: 17 }}>
-                发送【<span style={{ fontWeight: 800 }}>扣</span>】尝试脱离负长度困境
+                发送【<span style={{ fontWeight: 800 }}>扣</span>
+                】尝试脱离负长度困境
               </div>
             </div>
           </div>
@@ -115,16 +117,13 @@ export default function DickUsageCard() {
                 】与别人对决
               </div>
               <div style={{ fontSize: 17 }}>
-                <span style={{ fontWeight: 800 }}>勾引</span>：
-                你为负，对方为正
+                <span style={{ fontWeight: 800 }}>勾引</span>： 你为负，对方为正
               </div>
               <div style={{ fontSize: 17 }}>
-                <span style={{ fontWeight: 800 }}>击剑</span>：
-                双方都为正
+                <span style={{ fontWeight: 800 }}>击剑</span>： 双方都为正
               </div>
               <div style={{ fontSize: 17 }}>
-                <span style={{ fontWeight: 800 }}>撅</span>：
-                你为正，对方为负
+                <span style={{ fontWeight: 800 }}>撅</span>： 你为正，对方为负
               </div>
             </div>
           </div>

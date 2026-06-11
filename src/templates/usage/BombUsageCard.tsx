@@ -68,7 +68,11 @@ export default function BombUsageCard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
               ['01', '补货', '发送【购买炸弹】购买炸弹，5W微壳/个'],
-              ['02', '开火', '使用【炸弹@某人】攻击对方，消耗1个炸弹和体力/魅力'],
+              [
+                '02',
+                '开火',
+                '使用【炸弹@某人】攻击对方，消耗1个炸弹和体力/魅力',
+              ],
               ['03', '结果', '对方越富收益越高，但反噬也越重'],
             ].map(([step, title, text]) => (
               <div
