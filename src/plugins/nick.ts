@@ -48,9 +48,6 @@ export class NickService {
         }
       }
     }
-    this.ctx.logger.debug(
-      `Refreshed nick cache of ${config.enabledGroups.length} groups, total ${this.nickCache.size} entries`,
-    );
   }
 }
 
