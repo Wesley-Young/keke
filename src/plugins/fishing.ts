@@ -23,6 +23,8 @@ const BAIT_PRICE = 10_000;
 const MIN_STAMINA_TO_FISH = 20;
 const STAMINA_COST_MIN = 5;
 const STAMINA_COST_MAX = 20;
+const ULTRA_HIGH_CHARM_THRESHOLD = 50_000;
+const EXTRA_HIGH_CHARM_THRESHOLD = 20_000;
 const CHARM_HOOK_THRESHOLD = 5_000;
 const HIGH_CHARM_WAIT_MIN_MS = 10_000;
 const HIGH_CHARM_WAIT_MAX_MS = 20_000;
@@ -223,6 +225,13 @@ export const fishingItems: readonly FishingItemMeta[] = [
   },
 ];
 
+const extraHighCharmHookOutcomes: readonly KindedWeightedRule<HookOutcomeKind>[] =
+  [
+    { kind: 'hooked', weight: 8 },
+    { kind: 'yarn', weight: 1 },
+    { kind: 'empty', weight: 1 },
+  ];
+
 const highCharmHookOutcomes: readonly KindedWeightedRule<HookOutcomeKind>[] = [
   { kind: 'hooked', weight: 4 },
   { kind: 'yarn', weight: 1 },
@@ -233,6 +242,22 @@ const lowCharmHookOutcomes: readonly KindedWeightedRule<HookOutcomeKind>[] = [
   { kind: 'hooked', weight: 2 },
   { kind: 'empty', weight: 1 },
   { kind: 'yarn', weight: 1 },
+];
+
+const ultraHighCharmCatchOutcomes: readonly WeightedCatchOutcome[] = [
+  { kind: 'item', itemKind: 'shoe', weight: 1 },
+  { kind: 'item', itemKind: 'underwear', weight: 1 },
+  { kind: 'item', itemKind: 'seashell', weight: 1 },
+  { kind: 'item', itemKind: 'frog', weight: 3 },
+  { kind: 'item', itemKind: 'yellowFish', weight: 3 },
+  { kind: 'item', itemKind: 'octopus', weight: 3 },
+  { kind: 'item', itemKind: 'whale', weight: 3 },
+  { kind: 'item', itemKind: 'electricEel', weight: 1 },
+  { kind: 'item', itemKind: 'diamondRing', weight: 2 },
+  { kind: 'item', itemKind: 'crown', weight: 2 },
+  { kind: 'rodLoss', weight: 1 },
+  { kind: 'shellLoss', weight: 1 },
+  { kind: 'doubleYellowFish', weight: 3 },
 ];
 
 const catchOutcomes: readonly WeightedCatchOutcome[] = [
@@ -692,7 +717,10 @@ export class FishingService {
         };
       }
 
-      const catchResult = this.pickCatchResult(paidBalance.shell);
+      const catchResult = this.pickCatchResult(
+        paidBalance.charm,
+        paidBalance.shell,
+      );
 
       let nextBalance = paidBalance;
       if (catchResult.currencyPatch) {
@@ -887,16 +915,20 @@ export class FishingService {
 
   private pickHookOutcome(charm: number): HookOutcomeKind {
     const outcomes =
-      charm >= CHARM_HOOK_THRESHOLD
-        ? highCharmHookOutcomes
-        : lowCharmHookOutcomes;
+      charm >= EXTRA_HIGH_CHARM_THRESHOLD
+        ? extraHighCharmHookOutcomes
+        : charm >= CHARM_HOOK_THRESHOLD
+          ? highCharmHookOutcomes
+          : lowCharmHookOutcomes;
 
     return this.random.weightedPick(outcomes, (item) => item.weight).kind;
   }
 
-  private pickCatchResult(currentShell: number): CatchResult {
+  private pickCatchResult(charm: number, currentShell: number): CatchResult {
     const outcome = this.random.weightedPick(
-      catchOutcomes,
+      charm >= ULTRA_HIGH_CHARM_THRESHOLD
+        ? ultraHighCharmCatchOutcomes
+        : catchOutcomes,
       (item) => item.weight,
     );
 
