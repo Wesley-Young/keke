@@ -3,6 +3,16 @@ import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
 import {
+  assertPositiveInteger,
+  assertUserId,
+  capLoss,
+  formatDurationMs,
+  formatDurationSeconds,
+  type KindedWeightedRule,
+  pickRange,
+  type Range,
+} from '../util/rules';
+import {
   type CurrencyBalance,
   CurrencyService,
   formatCurrencyChange,
@@ -17,11 +27,6 @@ const MIN_ACTOR_CHARM = 50;
 
 type BombTierKind = 'poor' | 'middle' | 'rich';
 type BombOutcomeKind = 'success' | 'backfire';
-
-interface Range {
-  min: number;
-  max: number;
-}
 
 interface BombTier {
   kind: BombTierKind;
@@ -64,6 +69,21 @@ class BombRateLimitError extends Error {
   constructor(readonly remainingMs: number) {
     super('Bomb rate limited');
   }
+}
+
+interface BombSuccessRoll {
+  shellStolen: number;
+  actorStaminaLoss: number;
+  actorCharmLoss: number;
+  targetStaminaLoss: number;
+  targetCharmLoss: number;
+}
+
+interface BombBackfireRoll {
+  shellLoss: number;
+  actorStaminaLoss: number;
+  actorCharmLoss: number;
+  muteSeconds: number;
 }
 
 const poorTier: BombTier = {
@@ -114,18 +134,6 @@ const richTier: BombTier = {
   muteSeconds: { min: 120, max: 210 },
 };
 
-function assertUserId(userId: number): void {
-  if (!Number.isSafeInteger(userId)) {
-    throw new RangeError('userId must be a safe integer');
-  }
-}
-
-function assertPositiveInteger(value: number, label: string): void {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new RangeError(`${label} must be a positive integer`);
-  }
-}
-
 function pickTier(targetShell: number): BombTier {
   if (targetShell < 250_000) {
     return poorTier;
@@ -136,41 +144,6 @@ function pickTier(targetShell: number): BombTier {
   }
 
   return richTier;
-}
-
-function capLoss(current: number, loss: number): number {
-  return Math.min(current, loss);
-}
-
-function formatRemaining(ms: number): string {
-  const totalSeconds = Math.ceil(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes <= 0) {
-    return `${seconds}秒`;
-  }
-
-  if (seconds === 0) {
-    return `${minutes}分钟`;
-  }
-
-  return `${minutes}分${seconds}秒`;
-}
-
-function formatMinutes(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const restSeconds = seconds % 60;
-
-  if (minutes <= 0) {
-    return `${seconds}秒`;
-  }
-
-  if (restSeconds === 0) {
-    return `${minutes}分钟`;
-  }
-
-  return `${minutes}分${restSeconds}秒`;
 }
 
 export class BombService {
@@ -255,80 +228,34 @@ export class BombService {
         bomb: 1,
       });
 
-      const outcome: BombOutcomeKind = this.random.weightedPick(
-        [
-          { kind: 'success' as const, weight: tier.successWeight },
-          { kind: 'backfire' as const, weight: tier.backfireWeight },
-        ],
-        (item) => item.weight,
-      ).kind;
+      const outcome = this.pickOutcome(tier);
 
       this.consumeCooldown(actorUserId);
 
       if (outcome === 'success') {
-        const requestedSteal = this.random.range(
-          tier.stealShell.min,
-          tier.stealShell.max,
-        );
-        const stealCap = Math.floor(target.shell * MAX_STEAL_RATIO);
-        const shellStolen = capLoss(
-          target.shell,
-          Math.min(requestedSteal, stealCap),
-        );
-        const actorStaminaLoss = capLoss(
-          actor.stamina,
-          this.random.range(
-            tier.actorSuccessStamina.min,
-            tier.actorSuccessStamina.max,
-          ),
-        );
-        const actorCharmLoss = capLoss(
-          actor.charm,
-          this.random.range(
-            tier.actorSuccessCharm.min,
-            tier.actorSuccessCharm.max,
-          ),
-        );
-        const targetStaminaLoss = capLoss(
-          target.stamina,
-          this.random.range(
-            tier.targetSuccessStamina.min,
-            tier.targetSuccessStamina.max,
-          ),
-        );
-        const targetCharmLoss = capLoss(
-          target.charm,
-          this.random.range(
-            tier.targetSuccessCharm.min,
-            tier.targetSuccessCharm.max,
-          ),
-        );
+        const roll = this.rollSuccess(tier, actor, target);
 
         const transfer = await this.currency.transferIn(
           trx,
           targetUserId,
           actorUserId,
           {
-            shell: shellStolen,
+            shell: roll.shellStolen,
           },
         );
         const nextActor = await this.currency.spendIn(trx, actorUserId, {
-          stamina: actorStaminaLoss,
-          charm: actorCharmLoss,
+          stamina: roll.actorStaminaLoss,
+          charm: roll.actorCharmLoss,
         });
         const nextTarget = await this.currency.spendIn(trx, targetUserId, {
-          stamina: targetStaminaLoss,
-          charm: targetCharmLoss,
+          stamina: roll.targetStaminaLoss,
+          charm: roll.targetCharmLoss,
         });
 
         return {
           outcome,
           tier,
-          shellStolen,
-          actorStaminaLoss,
-          actorCharmLoss,
-          targetStaminaLoss,
-          targetCharmLoss,
+          ...roll,
           actor: {
             ...nextActor,
             shell: transfer.to.shell,
@@ -340,45 +267,80 @@ export class BombService {
         };
       }
 
-      const shellLoss = capLoss(
-        actor.shell,
-        this.random.range(tier.backfireShell.min, tier.backfireShell.max),
-      );
-      const actorStaminaLoss = capLoss(
-        actor.stamina,
-        this.random.range(
-          tier.actorBackfireStamina.min,
-          tier.actorBackfireStamina.max,
-        ),
-      );
-      const actorCharmLoss = capLoss(
-        actor.charm,
-        this.random.range(
-          tier.actorBackfireCharm.min,
-          tier.actorBackfireCharm.max,
-        ),
-      );
-      const muteSeconds = this.random.range(
-        tier.muteSeconds.min,
-        tier.muteSeconds.max,
-      );
+      const roll = this.rollBackfire(tier, actor);
       const nextActor = await this.currency.spendIn(trx, actorUserId, {
-        shell: shellLoss,
-        stamina: actorStaminaLoss,
-        charm: actorCharmLoss,
+        shell: roll.shellLoss,
+        stamina: roll.actorStaminaLoss,
+        charm: roll.actorCharmLoss,
       });
 
       return {
         outcome,
         tier,
-        shellLoss,
-        muteSeconds,
-        actorStaminaLoss,
-        actorCharmLoss,
+        ...roll,
         actor: nextActor,
         target,
       };
     });
+  }
+
+  private pickOutcome(tier: BombTier): BombOutcomeKind {
+    const outcomes: readonly KindedWeightedRule<BombOutcomeKind>[] = [
+      { kind: 'success', weight: tier.successWeight },
+      { kind: 'backfire', weight: tier.backfireWeight },
+    ];
+
+    return this.random.weightedPick(outcomes, (item) => item.weight).kind;
+  }
+
+  private rollSuccess(
+    tier: BombTier,
+    actor: CurrencyBalance,
+    target: CurrencyBalance,
+  ): BombSuccessRoll {
+    const requestedSteal = pickRange(this.random, tier.stealShell);
+    const stealCap = Math.floor(target.shell * MAX_STEAL_RATIO);
+
+    return {
+      shellStolen: capLoss(target.shell, Math.min(requestedSteal, stealCap)),
+      actorStaminaLoss: capLoss(
+        actor.stamina,
+        pickRange(this.random, tier.actorSuccessStamina),
+      ),
+      actorCharmLoss: capLoss(
+        actor.charm,
+        pickRange(this.random, tier.actorSuccessCharm),
+      ),
+      targetStaminaLoss: capLoss(
+        target.stamina,
+        pickRange(this.random, tier.targetSuccessStamina),
+      ),
+      targetCharmLoss: capLoss(
+        target.charm,
+        pickRange(this.random, tier.targetSuccessCharm),
+      ),
+    };
+  }
+
+  private rollBackfire(
+    tier: BombTier,
+    actor: CurrencyBalance,
+  ): BombBackfireRoll {
+    return {
+      shellLoss: capLoss(
+        actor.shell,
+        pickRange(this.random, tier.backfireShell),
+      ),
+      actorStaminaLoss: capLoss(
+        actor.stamina,
+        pickRange(this.random, tier.actorBackfireStamina),
+      ),
+      actorCharmLoss: capLoss(
+        actor.charm,
+        pickRange(this.random, tier.actorBackfireCharm),
+      ),
+      muteSeconds: pickRange(this.random, tier.muteSeconds),
+    };
   }
 
   private assertCooldown(actorUserId: number): void {
@@ -498,7 +460,7 @@ ${formatCurrencyChange('炸弹', result.actor.bomb, -1)}
 ${seg.mention(message.sender_id)}
 炸弹反噬！
 目标档位：${result.tier.label}
-反噬禁言：${muteOk ? formatMinutes(result.muteSeconds) : '未生效'}
+反噬禁言：${muteOk ? formatDurationSeconds(result.muteSeconds) : '未生效'}
 ${formatCurrencyChange('微壳', result.actor.shell, -result.shellLoss)}
 ${formatCurrencyChange('体力', result.actor.stamina, -result.actorStaminaLoss)}
 ${formatCurrencyChange('魅力', result.actor.charm, -result.actorCharmLoss)}
@@ -508,7 +470,7 @@ ${formatCurrencyChange('炸弹', result.actor.bomb, -1)}
           if (error instanceof BombRateLimitError) {
             await session.reply(msg`
 ${seg.mention(message.sender_id)}
-你还在炸弹冷却中，剩余${formatRemaining(error.remainingMs)}
+你还在炸弹冷却中，剩余${formatDurationMs(error.remainingMs)}
             `);
             return;
           }

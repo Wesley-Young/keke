@@ -2,7 +2,13 @@ import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
-import type { QueryRunner } from '../types/kysely';
+import type { QueryRunner } from '../util/kysely';
+import {
+  assertUserId,
+  pickRange,
+  type Range,
+  type WeightedRule,
+} from '../util/rules';
 import {
   CurrencyService,
   formatCurrencyChange,
@@ -61,6 +67,30 @@ interface DuelResult {
 
 type DuelMode = 'seduce' | 'fence' | 'top';
 
+type LengthActionValueKind = 'delta' | 'percent' | 'none';
+
+interface LengthActionRuleBase<TKind extends LengthActionValueKind>
+  extends WeightedRule {
+  kind: TKind;
+  title: string;
+}
+
+type LengthActionRule =
+  | (LengthActionRuleBase<'delta'> & {
+      delta: Range;
+      apply(length: number, delta: number): number;
+      describe(delta: number): string;
+    })
+  | (LengthActionRuleBase<'percent'> & {
+      percent: Range;
+      apply(length: number, percent: number): number;
+      describe(percent: number): string;
+    })
+  | (LengthActionRuleBase<'none'> & {
+      apply(length: number): number;
+      describe(): string;
+    });
+
 interface DuelOutcome {
   title: string;
   weight: number;
@@ -88,12 +118,6 @@ export class DickRateLimitError extends Error {
   ) {
     super('Dick action rate limited');
     this.name = 'DickRateLimitError';
-  }
-}
-
-function assertUserId(userId: number): void {
-  if (!Number.isSafeInteger(userId)) {
-    throw new RangeError('userId must be a safe integer');
   }
 }
 
@@ -144,7 +168,7 @@ ${label}还没有注册牛牛，请先发送【注册牛牛】
 -【击剑】需要[双方为正]
 -【撅】需要[你为正/对方为负]
 发送【割牛牛】可以花费10W微壳割掉你的牛牛，换取一个重新开始的机会
-    `.trim(),
+      `.trim(),
     );
   }
 
@@ -166,6 +190,92 @@ function multiplyByPercent(length: number, percent: number): number {
 function divideByPercent(length: number, percent: number): number {
   return Math.trunc((length * 100) / percent);
 }
+
+const masturbateOutcomes: readonly LengthActionRule[] = [
+  {
+    kind: 'delta',
+    title: '突发奇想',
+    weight: 3,
+    delta: { min: 20, max: 480 },
+    apply: (length, delta) => length + delta,
+    describe: (delta) =>
+      `你的牛牛感觉自己能变得再长一点，增长了${formatDelta(delta)}`,
+  },
+  {
+    kind: 'delta',
+    title: '突发恶疾',
+    weight: 6,
+    delta: { min: 10, max: 500 },
+    apply: (length, delta) => length - delta,
+    describe: (delta) =>
+      `你的牛牛觉得自己不该这么长，缩短了${formatDelta(delta)}`,
+  },
+  {
+    kind: 'percent',
+    title: '大获失败',
+    weight: 1,
+    percent: { min: 101, max: 300 },
+    apply: (length, percent) => divideByPercent(length, percent),
+    describe: (percent) => `长度除以${formatFactor(percent)}`,
+  },
+  {
+    kind: 'percent',
+    title: '大获成功',
+    weight: 1,
+    percent: { min: 101, max: 300 },
+    apply: (length, percent) => multiplyByPercent(length, percent),
+    describe: (percent) => `长度乘以${formatFactor(percent)}`,
+  },
+  {
+    kind: 'none',
+    title: '没有变化',
+    weight: 1,
+    apply: (length) => length,
+    describe: () => '你的牛牛失去了梦想，长度没有变化',
+  },
+];
+
+const tuckOutcomes: readonly LengthActionRule[] = [
+  {
+    kind: 'delta',
+    title: '扣成功',
+    weight: 3,
+    delta: { min: 10, max: 500 },
+    apply: (length, delta) => length + delta,
+    describe: (delta) => `它感觉自己能变得长一点，增长了${formatDelta(delta)}`,
+  },
+  {
+    kind: 'delta',
+    title: '扣失败',
+    weight: 3,
+    delta: { min: 10, max: 400 },
+    apply: (length, delta) => length - delta,
+    describe: (delta) => `它突发恶疾，缩短了${formatDelta(delta)}`,
+  },
+  {
+    kind: 'percent',
+    title: '扣大获成功',
+    weight: 1,
+    percent: { min: 101, max: 400 },
+    apply: (length, percent) => divideByPercent(length, percent),
+    describe: (percent) => `长度除以${formatFactor(percent)}`,
+  },
+  {
+    kind: 'percent',
+    title: '扣大获失败',
+    weight: 1,
+    percent: { min: 101, max: 290 },
+    apply: (length, percent) => multiplyByPercent(length, percent),
+    describe: (percent) => `长度乘以${formatFactor(percent)}`,
+  },
+  {
+    kind: 'none',
+    title: '没有变化',
+    weight: 2,
+    apply: (length) => length,
+    describe: () => '它失去了梦想，长度没有变化',
+  },
+];
 
 const duelOutcomes: readonly DuelOutcome[] = [
   {
@@ -379,45 +489,21 @@ export class DickService {
         );
       }
 
-      const roll = this.random.range(1, 12);
-      let nextLength = profile.length;
-      let title = '';
-      let detail = '';
-
-      if (roll === 1 || roll === 2 || roll === 11) {
-        const delta = this.random.range(20, 480);
-        nextLength += delta;
-        title = '突发奇想';
-        detail = `你的牛牛感觉自己能变得再长一点，增长了${formatDelta(delta)}`;
-      } else if ([3, 4, 5, 7, 8, 12].includes(roll)) {
-        const delta = this.random.range(10, 500);
-        nextLength -= delta;
-        title = '突发恶疾';
-        detail = `你的牛牛觉得自己不该这么长，缩短了${formatDelta(delta)}`;
-      } else if (roll === 6) {
-        const percent = this.random.range(101, 300);
-        nextLength = divideByPercent(profile.length, percent);
-        title = '大获失败';
-        detail = `长度除以${formatFactor(percent)}`;
-      } else if (roll === 10) {
-        const percent = this.random.range(101, 300);
-        nextLength = multiplyByPercent(profile.length, percent);
-        title = '大获成功';
-        detail = `长度乘以${formatFactor(percent)}`;
-      } else {
-        title = '没有变化';
-        detail = '你的牛牛失去了梦想，长度没有变化';
-      }
+      const rolled = this.rollLengthAction(profile.length, masturbateOutcomes);
 
       const nextBalance = await this.currency.spendIn(trx, userId, {
         stamina: staminaCost,
       });
-      const nextProfile = await this.setLengthIn(trx, userId, nextLength);
+      const nextProfile = await this.setLengthIn(
+        trx,
+        userId,
+        rolled.nextLength,
+      );
 
       return {
         profile: nextProfile,
-        title,
-        detail,
+        title: rolled.title,
+        detail: rolled.detail,
         staminaCost,
         staminaLeft: nextBalance.stamina,
       };
@@ -449,45 +535,21 @@ export class DickService {
         );
       }
 
-      const roll = this.random.range(1, 10);
-      let nextLength = profile.length;
-      let title = '';
-      let detail = '';
-
-      if (roll === 1 || roll === 2 || roll === 6) {
-        const delta = this.random.range(10, 500);
-        nextLength += delta;
-        title = '扣成功';
-        detail = `它感觉自己能变得长一点，增长了${formatDelta(delta)}`;
-      } else if (roll === 3 || roll === 4 || roll === 5) {
-        const delta = this.random.range(10, 400);
-        nextLength -= delta;
-        title = '扣失败';
-        detail = `它突发恶疾，缩短了${formatDelta(delta)}`;
-      } else if (roll === 7) {
-        const percent = this.random.range(101, 400);
-        nextLength = divideByPercent(profile.length, percent);
-        title = '扣大获成功';
-        detail = `长度除以${formatFactor(percent)}`;
-      } else if (roll === 8) {
-        const percent = this.random.range(101, 290);
-        nextLength = multiplyByPercent(profile.length, percent);
-        title = '扣大获失败';
-        detail = `长度乘以${formatFactor(percent)}`;
-      } else {
-        title = '没有变化';
-        detail = '它失去了梦想，长度没有变化';
-      }
+      const rolled = this.rollLengthAction(profile.length, tuckOutcomes);
 
       const nextBalance = await this.currency.spendIn(trx, userId, {
         stamina: staminaCost,
       });
-      const nextProfile = await this.setLengthIn(trx, userId, nextLength);
+      const nextProfile = await this.setLengthIn(
+        trx,
+        userId,
+        rolled.nextLength,
+      );
 
       return {
         profile: nextProfile,
-        title,
-        detail,
+        title: rolled.title,
+        detail: rolled.detail,
         staminaCost,
         staminaLeft: nextBalance.stamina,
       };
@@ -595,6 +657,41 @@ export class DickService {
     }
 
     this.lastActionAtByUserId.set(userId, now);
+  }
+
+  private rollLengthAction(
+    length: number,
+    outcomes: readonly LengthActionRule[],
+  ): {
+    nextLength: number;
+    title: string;
+    detail: string;
+  } {
+    const outcome = this.random.weightedPick(outcomes, (item) => item.weight);
+
+    if (outcome.kind === 'delta') {
+      const delta = pickRange(this.random, outcome.delta);
+      return {
+        nextLength: outcome.apply(length, delta),
+        title: outcome.title,
+        detail: outcome.describe(delta),
+      };
+    }
+
+    if (outcome.kind === 'percent') {
+      const percent = pickRange(this.random, outcome.percent);
+      return {
+        nextLength: outcome.apply(length, percent),
+        title: outcome.title,
+        detail: outcome.describe(percent),
+      };
+    }
+
+    return {
+      nextLength: outcome.apply(length),
+      title: outcome.title,
+      detail: outcome.describe(),
+    };
   }
 
   private async setLengthIn(

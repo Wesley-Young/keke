@@ -1,8 +1,14 @@
-import { definePlugin, msg, param, seg } from '@fraqjs/fraq';
+import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
-import type { QueryRunner } from '../types/kysely';
+import type { QueryRunner } from '../util/kysely';
+import {
+  assertUserId,
+  type KindedWeightedRule,
+  pickRange,
+  type Range,
+} from '../util/rules';
 import {
   type CurrencyBalance,
   type CurrencyPatch,
@@ -48,6 +54,7 @@ type FishingInventoryKind = (typeof fishingInventoryKinds)[number];
 
 type FishingInventory = Record<FishingInventoryKind, number>;
 type FishingInventoryPatch = Partial<FishingInventory>;
+type HookOutcomeKind = 'hooked' | 'empty' | 'yarn';
 
 export interface FishingInventoryRow extends FishingInventory {
   user_id: number;
@@ -91,16 +98,76 @@ type SellFishTextParseResult =
       reason: string;
     };
 
-interface WeightedHookOutcome {
-  outcome: 'hooked' | 'empty' | 'yarn';
-  weight: number;
-}
-
 type WeightedCatchOutcome =
   | { kind: 'item'; itemKind: FishingItemKind; weight: number }
   | {
-      kind: 'rodLoss' | 'shellLoss' | 'doubleYellowFish' | 'diamondRing';
+      kind: 'rodLoss' | 'shellLoss' | 'doubleYellowFish';
       weight: number;
+    };
+
+type FishingFishResult =
+  | {
+      outcome: 'empty';
+      staminaCost: number;
+      charm: number;
+      shellDelta: number;
+      balance: CurrencyBalance;
+      inventory: FishingInventory;
+    }
+  | {
+      outcome: 'yarn';
+      staminaCost: number;
+      charm: number;
+      shellDelta: number;
+      balance: CurrencyBalance;
+      inventory: FishingInventory;
+    }
+  | {
+      outcome: 'catch';
+      staminaCost: number;
+      charm: number;
+      catchResult: CatchResult;
+      shellDelta: number;
+      balance: CurrencyBalance;
+      inventory: FishingInventory;
+    };
+
+type SellShellRule =
+  | {
+      kind: 'range';
+      shell: Range;
+    }
+  | {
+      kind: 'fixed';
+      shell: number;
+    }
+  | {
+      kind: 'specialMultiplier';
+      baseShell: Range;
+      eventKind: string;
+      eventMessage(multiplier: number): string;
+    }
+  | {
+      kind: 'weighted';
+      outcomes: readonly SellShellOutcomeRule[];
+    };
+
+type SellShellOutcomeRule =
+  | (KindedWeightedRule<'reward'> & {
+      shell: Range;
+    })
+  | (KindedWeightedRule<'shock'> & {
+      shell: number;
+      message: string;
+    });
+
+type SellCharmRule =
+  | {
+      kind: 'none';
+    }
+  | {
+      kind: 'range';
+      charm: Range;
     };
 
 const fishingItems: readonly FishingItemMeta[] = [
@@ -155,6 +222,104 @@ const fishingItems: readonly FishingItemMeta[] = [
     emoji: '👑',
   },
 ];
+
+const highCharmHookOutcomes: readonly KindedWeightedRule<HookOutcomeKind>[] = [
+  { kind: 'hooked', weight: 4 },
+  { kind: 'yarn', weight: 1 },
+  { kind: 'empty', weight: 1 },
+];
+
+const lowCharmHookOutcomes: readonly KindedWeightedRule<HookOutcomeKind>[] = [
+  { kind: 'hooked', weight: 2 },
+  { kind: 'empty', weight: 1 },
+  { kind: 'yarn', weight: 1 },
+];
+
+const catchOutcomes: readonly WeightedCatchOutcome[] = [
+  { kind: 'item', itemKind: 'shoe', weight: 1 },
+  { kind: 'item', itemKind: 'underwear', weight: 1 },
+  { kind: 'item', itemKind: 'seashell', weight: 1 },
+  { kind: 'item', itemKind: 'frog', weight: 1 },
+  { kind: 'item', itemKind: 'yellowFish', weight: 1 },
+  { kind: 'item', itemKind: 'octopus', weight: 1 },
+  { kind: 'item', itemKind: 'whale', weight: 1 },
+  { kind: 'item', itemKind: 'electricEel', weight: 1 },
+  { kind: 'item', itemKind: 'diamondRing', weight: 1 },
+  { kind: 'item', itemKind: 'crown', weight: 1 },
+  { kind: 'rodLoss', weight: 1 },
+  { kind: 'shellLoss', weight: 1 },
+  { kind: 'doubleYellowFish', weight: 1 },
+];
+
+const sellShellRules: Record<FishingItemKind, SellShellRule> = {
+  shoe: {
+    kind: 'specialMultiplier',
+    baseShell: { min: 2_000, max: 5_000 },
+    eventKind: 'footFan',
+    eventMessage: (multiplier) => `遇见神秘的足控，破鞋增值到${multiplier}倍`,
+  },
+  underwear: {
+    kind: 'specialMultiplier',
+    baseShell: { min: 8_000, max: 9_000 },
+    eventKind: 'collector',
+    eventMessage: (multiplier) =>
+      `遇见神秘的内衣收藏家，内衣增值到${multiplier}倍`,
+  },
+  seashell: {
+    kind: 'range',
+    shell: { min: 15_000, max: 20_000 },
+  },
+  frog: {
+    kind: 'range',
+    shell: { min: 38_000, max: 45_000 },
+  },
+  yellowFish: {
+    kind: 'range',
+    shell: { min: 50_000, max: 60_000 },
+  },
+  octopus: {
+    kind: 'range',
+    shell: { min: 58_000, max: 65_000 },
+  },
+  whale: {
+    kind: 'fixed',
+    shell: 100_000,
+  },
+  electricEel: {
+    kind: 'weighted',
+    outcomes: [
+      { kind: 'reward', weight: 1, shell: { min: 80_000, max: 120_000 } },
+      { kind: 'shock', weight: 1, shell: -68_800, message: '电鳗把你电到了' },
+    ],
+  },
+  diamondRing: {
+    kind: 'fixed',
+    shell: 180_000,
+  },
+  crown: {
+    kind: 'fixed',
+    shell: 300_000,
+  },
+};
+
+const sellCharmRules: Record<FishingItemKind, SellCharmRule> = {
+  shoe: { kind: 'none' },
+  underwear: { kind: 'none' },
+  seashell: { kind: 'none' },
+  frog: { kind: 'none' },
+  yellowFish: { kind: 'none' },
+  octopus: { kind: 'none' },
+  whale: { kind: 'none' },
+  electricEel: { kind: 'none' },
+  diamondRing: {
+    kind: 'range',
+    charm: { min: 50, max: 150 },
+  },
+  crown: {
+    kind: 'range',
+    charm: { min: 151, max: 250 },
+  },
+};
 
 const fishingItemByKind = new Map(
   fishingItems.map((item) => [item.kind, item]),
@@ -439,18 +604,20 @@ export class FishingService {
   ) {}
 
   async getInventory(userId: number): Promise<FishingInventory> {
+    assertUserId(userId);
+
     return getInventoryIn(this.db.kysely, userId);
   }
 
   async buyRod(userId: number) {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       const balance = await this.currency.getIn(trx, userId);
       if (balance.shell < ROD_PRICE) {
-        return {
-          ok: false as const,
-          balance,
-          inventory: await getInventoryIn(trx, userId),
-        };
+        throw new Error(
+          `你的微壳不足，购买鱼竿需要${ROD_PRICE}微壳\n当前微壳：${balance.shell}`,
+        );
       }
 
       const nextBalance = await this.currency.spendIn(trx, userId, {
@@ -461,14 +628,15 @@ export class FishingService {
       });
 
       return {
-        ok: true as const,
         balance: nextBalance,
         inventory,
       };
     });
   }
 
-  async fish(userId: number) {
+  async fish(userId: number): Promise<FishingFishResult> {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       await ensureInventoryRow(trx, userId);
 
@@ -476,30 +644,34 @@ export class FishingService {
       const balance = await this.currency.getIn(trx, userId);
 
       if (inventory.rod < 1) {
-        return {
-          ok: false as const,
-          reason: 'noRod' as const,
-          balance,
-          inventory,
-        };
+        throw new Error(
+          `
+你没有鱼竿，发送【购买鱼竿】可以花5W微壳购买
+
+获得鱼竿后，发送【钓鱼】自动花费1W微壳购买鱼饵
+每次钓鱼消耗${STAMINA_COST_MIN}-${STAMINA_COST_MAX}体力
+体力至少需要${MIN_STAMINA_TO_FISH}
+钓到的鱼可以卖掉换微壳和魅力，发送【卖鱼 物品名】出售
+也可以发送【卖鱼 全部】出售所有的鱼（和物品）
+
+发送【鱼塘】查看能够钓到的鱼（和别的东西）
+发送【鱼库】查看拥有的鱼和鱼竿
+
+鱼塘里有：${formatFishPond()}
+        `.trim(),
+        );
       }
 
       if (balance.shell < BAIT_PRICE) {
-        return {
-          ok: false as const,
-          reason: 'noShell' as const,
-          balance,
-          inventory,
-        };
+        throw new Error(
+          `你的微壳不足，钓鱼需要花费1W微壳购买鱼饵\n当前微壳：${balance.shell}`,
+        );
       }
 
       if (balance.stamina < MIN_STAMINA_TO_FISH) {
-        return {
-          ok: false as const,
-          reason: 'noStamina' as const,
-          balance,
-          inventory,
-        };
+        throw new Error(
+          `你没有足够的体力来钓鱼，至少需要${MIN_STAMINA_TO_FISH}体力\n当前体力：${balance.stamina}`,
+        );
       }
 
       const staminaCost = this.random.range(STAMINA_COST_MIN, STAMINA_COST_MAX);
@@ -511,7 +683,6 @@ export class FishingService {
       const hookOutcome = this.pickHookOutcome(paidBalance.charm);
       if (hookOutcome === 'empty') {
         return {
-          ok: true as const,
           outcome: 'empty' as const,
           staminaCost,
           charm: paidBalance.charm,
@@ -527,7 +698,6 @@ export class FishingService {
         });
 
         return {
-          ok: true as const,
           outcome: 'yarn' as const,
           staminaCost,
           charm: paidBalance.charm,
@@ -559,7 +729,6 @@ export class FishingService {
       }
 
       return {
-        ok: true as const,
         outcome: 'catch' as const,
         staminaCost,
         charm: paidBalance.charm,
@@ -572,17 +741,15 @@ export class FishingService {
   }
 
   async sellFish(userId: number, item: FishingItemMeta) {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       await ensureInventoryRow(trx, userId);
 
       const inventory = await getInventoryIn(trx, userId);
       const balance = await this.currency.getIn(trx, userId);
       if (inventory[item.kind] < 1) {
-        return {
-          ok: false as const,
-          inventory,
-          balance,
-        };
+        throw new Error(`你的${item.emoji}${item.name}不足`);
       }
 
       const shellResult = this.sellShell(item);
@@ -601,7 +768,6 @@ export class FishingService {
       );
 
       return {
-        ok: true as const,
         inventory: nextInventory,
         balance: nextBalance,
         shellReward: shellDelta(balance, nextBalance),
@@ -612,6 +778,8 @@ export class FishingService {
   }
 
   async sellFishBatch(userId: number, requests: readonly SellFishRequest[]) {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       await ensureInventoryRow(trx, userId);
 
@@ -619,13 +787,9 @@ export class FishingService {
       const balance = await this.currency.getIn(trx, userId);
       for (const { item, count } of requests) {
         if (inventory[item.kind] < count) {
-          return {
-            ok: false as const,
-            item,
-            requestedCount: count,
-            inventory,
-            balance,
-          };
+          throw new Error(
+            `你的${item.emoji}${item.name}不足，需要${count}个，当前有${inventory[item.kind]}个`,
+          );
         }
       }
 
@@ -668,7 +832,6 @@ export class FishingService {
       );
 
       return {
-        ok: true as const,
         inventory: nextInventory,
         balance: nextBalance,
         shellReward: shellDelta(balance, nextBalance),
@@ -681,17 +844,15 @@ export class FishingService {
   }
 
   async sellAllFish(userId: number) {
+    assertUserId(userId);
+
     return this.db.kysely.transaction().execute(async (trx) => {
       await ensureInventoryRow(trx, userId);
 
       const inventory = await getInventoryIn(trx, userId);
       const balance = await this.currency.getIn(trx, userId);
       if (!hasAnyFishingItem(inventory)) {
-        return {
-          ok: false as const,
-          inventory,
-          balance,
-        };
+        throw new Error('你的鱼库里没有可以卖掉的鱼（和物品）');
       }
 
       const inventoryPatch: FishingInventoryPatch = {};
@@ -737,7 +898,6 @@ export class FishingService {
       );
 
       return {
-        ok: true as const,
         inventory: nextInventory,
         balance: nextBalance,
         shellReward: shellDelta(balance, nextBalance),
@@ -749,40 +909,18 @@ export class FishingService {
     });
   }
 
-  private pickHookOutcome(charm: number): 'hooked' | 'empty' | 'yarn' {
-    const outcomes: readonly WeightedHookOutcome[] =
+  private pickHookOutcome(charm: number): HookOutcomeKind {
+    const outcomes =
       charm >= CHARM_HOOK_THRESHOLD
-        ? [
-            { outcome: 'hooked', weight: 4 },
-            { outcome: 'yarn', weight: 1 },
-            { outcome: 'empty', weight: 1 },
-          ]
-        : [
-            { outcome: 'hooked', weight: 2 },
-            { outcome: 'empty', weight: 1 },
-            { outcome: 'yarn', weight: 1 },
-          ];
+        ? highCharmHookOutcomes
+        : lowCharmHookOutcomes;
 
-    return this.random.weightedPick(outcomes, (item) => item.weight).outcome;
+    return this.random.weightedPick(outcomes, (item) => item.weight).kind;
   }
 
   private pickCatchResult(currentShell: number): CatchResult {
     const outcome = this.random.weightedPick(
-      [
-        { kind: 'item', itemKind: 'shoe', weight: 1 },
-        { kind: 'item', itemKind: 'underwear', weight: 1 },
-        { kind: 'item', itemKind: 'seashell', weight: 1 },
-        { kind: 'item', itemKind: 'frog', weight: 1 },
-        { kind: 'item', itemKind: 'yellowFish', weight: 1 },
-        { kind: 'item', itemKind: 'octopus', weight: 1 },
-        { kind: 'item', itemKind: 'whale', weight: 1 },
-        { kind: 'item', itemKind: 'electricEel', weight: 1 },
-        { kind: 'item', itemKind: 'diamondRing', weight: 1 },
-        { kind: 'item', itemKind: 'crown', weight: 1 },
-        { kind: 'rodLoss', weight: 1 },
-        { kind: 'shellLoss', weight: 1 },
-        { kind: 'doubleYellowFish', weight: 1 },
-      ] satisfies readonly WeightedCatchOutcome[],
+      catchOutcomes,
       (item) => item.weight,
     );
 
@@ -811,99 +949,63 @@ export class FishingService {
   }
 
   private sellShell(item: FishingItemMeta): SellShellResult {
-    switch (item.kind) {
-      case 'shoe': {
-        const baseReward = this.random.range(2_000, 5_000);
-        const footFanOutcome = this.random.weightedPick(
-          [
-            { kind: 'footFan', weight: SPECIAL_SELL_EVENT_CHANCE_WEIGHT },
-            { kind: 'normal', weight: SPECIAL_SELL_EVENT_NORMAL_WEIGHT },
-          ],
-          (item) => item.weight,
-        );
+    const rule = sellShellRules[item.kind];
 
-        if (footFanOutcome.kind === 'normal') {
-          return { shellReward: baseReward };
-        }
-
-        const multiplier = this.random.range(
-          SPECIAL_SELL_EVENT_MIN_MULTIPLIER,
-          SPECIAL_SELL_EVENT_MAX_MULTIPLIER,
-        );
-
-        return {
-          shellReward: baseReward * multiplier,
-          message: `遇见神秘的足控，破鞋增值到${multiplier}倍`,
-        };
-      }
-      case 'underwear': {
-        const baseReward = this.random.range(8_000, 9_000);
-        const collectorOutcome = this.random.weightedPick(
-          [
-            { kind: 'collector', weight: SPECIAL_SELL_EVENT_CHANCE_WEIGHT },
-            { kind: 'normal', weight: SPECIAL_SELL_EVENT_NORMAL_WEIGHT },
-          ],
-          (item) => item.weight,
-        );
-
-        if (collectorOutcome.kind === 'normal') {
-          return { shellReward: baseReward };
-        }
-
-        const multiplier = this.random.range(
-          SPECIAL_SELL_EVENT_MIN_MULTIPLIER,
-          SPECIAL_SELL_EVENT_MAX_MULTIPLIER,
-        );
-
-        return {
-          shellReward: baseReward * multiplier,
-          message: `遇见神秘的内衣收藏家，内衣增值到${multiplier}倍`,
-        };
-      }
-      case 'seashell':
-        return { shellReward: this.random.range(15_000, 20_000) };
-      case 'frog':
-        return { shellReward: this.random.range(38_000, 45_000) };
-      case 'yellowFish':
-        return { shellReward: this.random.range(50_000, 60_000) };
-      case 'octopus':
-        return { shellReward: this.random.range(58_000, 65_000) };
-      case 'whale':
-        return { shellReward: 100_000 };
-      case 'electricEel': {
-        const outcome = this.random.weightedPick(
-          [
-            { kind: 'reward', weight: 1 },
-            { kind: 'shock', weight: 1 },
-          ],
-          (item) => item.weight,
-        );
-
-        if (outcome.kind === 'reward') {
-          return { shellReward: this.random.range(80_000, 120_000) };
-        }
-
-        return {
-          shellReward: -68_800,
-          message: '电鳗把你电到了',
-        };
-      }
-      case 'diamondRing':
-        return { shellReward: 180_000 };
-      case 'crown':
-        return { shellReward: 300_000 };
+    if (rule.kind === 'range') {
+      return { shellReward: pickRange(this.random, rule.shell) };
     }
+
+    if (rule.kind === 'fixed') {
+      return { shellReward: rule.shell };
+    }
+
+    if (rule.kind === 'weighted') {
+      const outcome = this.random.weightedPick(
+        rule.outcomes,
+        (item) => item.weight,
+      );
+
+      if (outcome.kind === 'reward') {
+        return { shellReward: pickRange(this.random, outcome.shell) };
+      }
+
+      return {
+        shellReward: outcome.shell,
+        message: outcome.message,
+      };
+    }
+
+    const baseReward = pickRange(this.random, rule.baseShell);
+    const eventOutcome = this.random.weightedPick(
+      [
+        { kind: rule.eventKind, weight: SPECIAL_SELL_EVENT_CHANCE_WEIGHT },
+        { kind: 'normal', weight: SPECIAL_SELL_EVENT_NORMAL_WEIGHT },
+      ],
+      (item) => item.weight,
+    );
+
+    if (eventOutcome.kind === 'normal') {
+      return { shellReward: baseReward };
+    }
+
+    const multiplier = this.random.range(
+      SPECIAL_SELL_EVENT_MIN_MULTIPLIER,
+      SPECIAL_SELL_EVENT_MAX_MULTIPLIER,
+    );
+
+    return {
+      shellReward: baseReward * multiplier,
+      message: rule.eventMessage(multiplier),
+    };
   }
 
   private sellCharm(item: FishingItemMeta): number {
-    switch (item.kind) {
-      case 'diamondRing':
-        return this.random.range(50, 150);
-      case 'crown':
-        return this.random.range(151, 250);
-      default:
-        return 0;
+    const rule = sellCharmRules[item.kind];
+    if (rule.kind === 'none') {
+      return 0;
     }
+
+    return pickRange(this.random, rule.charm);
   }
 }
 
@@ -918,6 +1020,17 @@ export const FishingPlugin = definePlugin({
   apply(ctx) {
     const fishing = new FishingService(ctx.db, ctx.currency, ctx.random);
     const fishingUserIds = new Set<number>();
+    const replyError = async (
+      session: Session,
+      error: unknown,
+      fallback: string,
+    ) => {
+      const message = session.raw;
+      await session.reply(msg`
+${seg.mention(message.sender_id)}
+${error instanceof Error ? error.message : fallback}
+      `);
+    };
 
     ctx.provide(FishingService, fishing);
 
@@ -972,23 +1085,19 @@ export const FishingPlugin = definePlugin({
 
     ctx.router.command('购买鱼竿').execute(async (session) => {
       const message = session.raw;
-      const result = await fishing.buyRod(message.sender_id);
 
-      if (!result.ok) {
+      try {
+        const result = await fishing.buyRod(message.sender_id);
+
         await session.reply(msg`
-${seg.mention(message.sender_id)}
-你的微壳不足，购买鱼竿需要${ROD_PRICE}微壳
-当前微壳：${result.balance.shell}
-        `);
-        return;
-      }
-
-      await session.reply(msg`
 ${seg.mention(message.sender_id)}
 购买成功
 当前鱼竿：${result.inventory.rod}个
 ${formatCurrencyChange('微壳', result.balance.shell, -ROD_PRICE)}
       `);
+      } catch (error) {
+        await replyError(session, error, '购买鱼竿失败');
+      }
     });
 
     ctx.router.command('钓鱼').execute(async (session) => {
@@ -1001,43 +1110,6 @@ ${formatCurrencyChange('微壳', result.balance.shell, -ROD_PRICE)}
 
       try {
         const result = await fishing.fish(message.sender_id);
-
-        if (!result.ok) {
-          if (result.reason === 'noRod') {
-            await session.reply(msg`
-${seg.mention(message.sender_id)}
-你没有鱼竿，发送【购买鱼竿】可以花5W微壳购买
-
-获得鱼竿后，发送【钓鱼】自动花费1W微壳购买鱼饵
-每次钓鱼消耗${STAMINA_COST_MIN}-${STAMINA_COST_MAX}体力
-体力至少需要${MIN_STAMINA_TO_FISH}
-钓到的鱼可以卖掉换微壳和魅力，发送【卖鱼 物品名】出售
-也可以发送【卖鱼 全部】出售所有的鱼（和物品）
-
-发送【鱼塘】查看能够钓到的鱼（和别的东西）
-发送【鱼库】查看拥有的鱼和鱼竿
-
-鱼塘里有：${formatFishPond()}
-          `);
-            return;
-          }
-
-          if (result.reason === 'noShell') {
-            await session.reply(msg`
-${seg.mention(message.sender_id)}
-你的微壳不足，钓鱼需要花费1W微壳购买鱼饵
-当前微壳：${result.balance.shell}
-          `);
-            return;
-          }
-
-          await session.reply(msg`
-${seg.mention(message.sender_id)}
-你没有足够的体力来钓鱼，至少需要${MIN_STAMINA_TO_FISH}体力
-当前体力：${result.balance.stamina}
-        `);
-          return;
-        }
 
         await ctx.client.send_group_message_reaction({
           group_id: message.peer_id,
@@ -1079,6 +1151,8 @@ ${result.catchResult.text}
 ${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
 ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
       `);
+      } catch (error) {
+        await replyError(session, error, '钓鱼失败');
       } finally {
         fishingUserIds.delete(message.sender_id);
       }
@@ -1102,17 +1176,11 @@ ${seg.mention(message.sender_id)}
         const message = session.raw;
         const sellText = content.trim();
 
-        if (sellText === '全部') {
-          const result = await fishing.sellAllFish(message.sender_id);
-          if (!result.ok) {
-            await session.reply(msg`
-${seg.mention(message.sender_id)}
-你的鱼库里没有可以卖掉的鱼（和物品）
-            `);
-            return;
-          }
+        try {
+          if (sellText === '全部') {
+            const result = await fishing.sellAllFish(message.sender_id);
 
-          await session.reply(msg`
+            await session.reply(msg`
 ${seg.mention(message.sender_id)}
 成功售卖所有收获，共${result.soldCount}个
 ${result.soldItems}
@@ -1123,32 +1191,25 @@ ${formatSellCurrencyChanges(
   result.charmReward,
 )}
           `);
-          return;
-        }
+            return;
+          }
 
-        const parseResult = parseSellFishText(sellText);
-        if (!parseResult.ok) {
-          await session.reply(msg`
+          const parseResult = parseSellFishText(sellText);
+          if (!parseResult.ok) {
+            await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${parseResult.reason}
 可以发送【查看鱼塘】看看能卖什么
           `);
-          return;
-        }
+            return;
+          }
 
-        if (parseResult.requests.length === 1) {
-          const [{ item, count }] = parseResult.requests;
-          if (count === 1) {
-            const result = await fishing.sellFish(message.sender_id, item);
-            if (!result.ok) {
+          if (parseResult.requests.length === 1) {
+            const [{ item, count }] = parseResult.requests;
+            if (count === 1) {
+              const result = await fishing.sellFish(message.sender_id, item);
+
               await session.reply(msg`
-${seg.mention(message.sender_id)}
-你的${item.emoji}${item.name}不足
-        `);
-              return;
-            }
-
-            await session.reply(msg`
 ${seg.mention(message.sender_id)}
 成功售卖了${item.emoji}${item.name}
 ${formatSellEvents(result.message ? [result.message] : [])}
@@ -1158,23 +1219,16 @@ ${formatSellCurrencyChanges(
   result.charmReward,
 )}
         `);
-            return;
+              return;
+            }
           }
-        }
 
-        const result = await fishing.sellFishBatch(
-          message.sender_id,
-          parseResult.requests,
-        );
-        if (!result.ok) {
+          const result = await fishing.sellFishBatch(
+            message.sender_id,
+            parseResult.requests,
+          );
+
           await session.reply(msg`
-${seg.mention(message.sender_id)}
-你的${result.item.emoji}${result.item.name}不足，需要${result.requestedCount}个，当前有${result.inventory[result.item.kind]}个
-        `);
-          return;
-        }
-
-        await session.reply(msg`
 ${seg.mention(message.sender_id)}
 成功售卖了${result.soldCount}个收获
 ${result.soldItems}
@@ -1185,6 +1239,9 @@ ${formatSellCurrencyChanges(
   result.charmReward,
 )}
         `);
+        } catch (error) {
+          await replyError(session, error, '卖鱼失败');
+        }
       });
 
     ctx.router.command('鱼塘').execute(async (session) => {

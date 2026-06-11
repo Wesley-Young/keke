@@ -1,7 +1,7 @@
 import { definePlugin } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
-import type { QueryRunner } from '../types/kysely';
+import type { QueryRunner } from '../util/kysely';
 
 export const currencyKinds = ['shell', 'stamina', 'charm', 'bomb'] as const;
 
