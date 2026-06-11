@@ -11,6 +11,7 @@ import CurrencyPlugin from './plugins/currency';
 import DickPlugin from './plugins/dick';
 import ExchangePlugin from './plugins/exchange';
 import FishingPlugin from './plugins/fishing';
+import LifecycleNoticePlugin from './plugins/lifecycle-notice';
 import NickPlugin from './plugins/nick';
 import QueryPlugin from './plugins/query';
 import SignInPlugin from './plugins/sign-in';
@@ -29,7 +30,7 @@ const ctx = Context.fromUrl(rootConfig.milky.url, {
 ctx.install(RandomPlugin);
 ctx.install(TakumiPlugin);
 
-function openKekeInstance(name: string, config: Config) {
+function registerInstance(name: string, config: Config) {
   const keke = ctx.fork(name, filter.group(...config.enabledGroups));
   const official = keke.fork(
     `${name}-official`,
@@ -42,6 +43,7 @@ function openKekeInstance(name: string, config: Config) {
   });
   keke.install(ConfigProviderPlugin, config);
   keke.install(CurrencyPlugin);
+  keke.install(LifecycleNoticePlugin);
   keke.install(NickPlugin);
 
   // Functional plugins
@@ -59,7 +61,7 @@ function openKekeInstance(name: string, config: Config) {
 }
 
 for (const [instanceName, config] of Object.entries(rootConfig.instances)) {
-  openKekeInstance(instanceName, config);
+  registerInstance(instanceName, config);
 }
 
 ctx.start();
