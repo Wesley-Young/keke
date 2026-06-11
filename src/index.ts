@@ -6,7 +6,7 @@ import RandomPlugin from '@fraqjs/plugin-random';
 import { config } from './config';
 import BombPlugin from './plugins/bomb';
 import CurrencyPlugin from './plugins/currency';
-import CurrencyQuery from './plugins/currency-query';
+import CurrencyQueryPlugin from './plugins/currency-query';
 import DickPlugin from './plugins/dick';
 import ExchangePlugin from './plugins/exchange';
 import FishingPlugin from './plugins/fishing';
@@ -35,7 +35,7 @@ keke.install(CurrencyPlugin);
 keke.install(NickPlugin);
 
 // Functional plugins
-keke.install(CurrencyQuery);
+keke.install(CurrencyQueryPlugin);
 keke.install(DickPlugin);
 keke.install(ExchangePlugin);
 keke.install(FishingPlugin);

@@ -11,7 +11,7 @@ interface WealthRankingEntry {
 
 const RANKING_LIMIT = 10;
 
-export const CurrencyQuery = definePlugin({
+export const CurrencyQueryPlugin = definePlugin({
   name: 'currency-query',
   inject: {
     db: DatabaseService,
@@ -73,4 +73,4 @@ ${seg.mention(userId)}
   },
 });
 
-export default CurrencyQuery;
+export default CurrencyQueryPlugin;
