@@ -1,7 +1,9 @@
 import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
+import { TakumiService } from '@fraqjs/plugin-takumi';
 
+import DickRankingCard from '../templates/DickRankingCard';
 import type { QueryRunner } from '../util/kysely';
 import {
   assertUserId,
@@ -738,6 +740,7 @@ export const DickPlugin = definePlugin({
     currency: CurrencyService,
     nick: NickService,
     random: RandomService,
+    takumi: TakumiService,
   },
   apply(ctx) {
     const dick = new DickService(ctx.db, ctx.currency, ctx.random);
@@ -982,36 +985,36 @@ ${error instanceof Error ? error.message : fallback}
         userId: row.user_id,
         length: row.length,
       }));
-      const makeLines = (
-        title: string,
-        entries: readonly DickRankingEntry[],
-      ): string[] => {
-        if (entries.length === 0) {
-          return [title, '暂无数据'];
-        }
-
-        return [
-          title,
-          ...entries.map((entry, index) => {
-            const nick =
-              message.message_scene === 'group'
-                ? ctx.nick.resolve(message.peer_id, entry.userId)
-                : undefined;
-            const user = nick
-              ? `${nick}(${entry.userId})`
-              : `QQ ${entry.userId}`;
-            return `#${index + 1} ${user} / ${formatLength(entry.length)}`;
-          }),
-        ];
-      };
+      const positiveEntries = positive.map((entry, index) => ({
+        rank: index + 1,
+        nickname:
+          message.message_scene === 'group'
+            ? (ctx.nick.resolve(message.peer_id, entry.userId) ?? '')
+            : '',
+        userId: entry.userId,
+        length: entry.length,
+      }));
+      const negativeEntries = negative.map((entry, index) => ({
+        rank: index + 1,
+        nickname:
+          message.message_scene === 'group'
+            ? (ctx.nick.resolve(message.peer_id, entry.userId) ?? '')
+            : '',
+        userId: entry.userId,
+        length: entry.length,
+      }));
+      const image = await ctx.takumi.renderJsxWithEmoji(
+        DickRankingCard({
+          positiveEntries,
+          negativeEntries,
+        }),
+        {
+          devicePixelRatio: 2,
+        },
+      );
 
       await session.reply(
-        msg`${[
-          '牛牛长度排行榜',
-          ...makeLines('正长度 TOP 5', positive),
-          '---',
-          ...makeLines('负长度 TOP 5', negative),
-        ].join('\n')}`,
+        msg`${seg.image(`base64://${image.toString('base64')}`)}`,
       );
     });
   },
