@@ -132,7 +132,7 @@ function toProfile(row: DickProfileRow): DickProfile {
   };
 }
 
-function formatLength(length: number): string {
+export function formatLength(length: number): string {
   const absolute = Math.trunc(Math.abs(length));
   const whole = Math.trunc(absolute / 100);
   const fraction = String(absolute % 100).padStart(2, '0');

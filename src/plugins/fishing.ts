@@ -49,10 +49,10 @@ const fishingItemKinds = [
 
 const fishingInventoryKinds = ['rod', ...fishingItemKinds] as const;
 
-type FishingItemKind = (typeof fishingItemKinds)[number];
+export type FishingItemKind = (typeof fishingItemKinds)[number];
 type FishingInventoryKind = (typeof fishingInventoryKinds)[number];
 
-type FishingInventory = Record<FishingInventoryKind, number>;
+export type FishingInventory = Record<FishingInventoryKind, number>;
 type FishingInventoryPatch = Partial<FishingInventory>;
 type HookOutcomeKind = 'hooked' | 'empty' | 'yarn';
 
@@ -66,7 +66,7 @@ declare module '@fraqjs/plugin-kysely' {
   }
 }
 
-interface FishingItemMeta {
+export interface FishingItemMeta {
   kind: FishingItemKind;
   name: string;
   emoji: string;
@@ -170,7 +170,7 @@ type SellCharmRule =
       charm: Range;
     };
 
-const fishingItems: readonly FishingItemMeta[] = [
+export const fishingItems: readonly FishingItemMeta[] = [
   {
     kind: 'shoe',
     name: '破鞋',
