@@ -2,6 +2,7 @@ import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
+import type { QueryRunner } from '../types/kysely';
 import {
   CurrencyService,
   formatCurrencyChange,
@@ -21,11 +22,6 @@ const DUEL_ACTION_STAMINA_COST_MAX = 20;
 const RANKING_LIMIT = 5;
 const RATE_LIMIT_MS = 60_000;
 const RATE_LIMIT_REACTION = '38';
-
-type DickQueryRunner = Pick<
-  DatabaseService['kysely'],
-  'deleteFrom' | 'insertInto' | 'selectFrom' | 'updateTable'
->;
 
 interface DickProfileRow {
   user_id: number;
@@ -265,7 +261,7 @@ export class DickService {
   }
 
   async getIn(
-    db: DickQueryRunner,
+    db: QueryRunner,
     userId: number,
   ): Promise<DickProfile | undefined> {
     assertUserId(userId);
@@ -602,7 +598,7 @@ export class DickService {
   }
 
   private async setLengthIn(
-    db: DickQueryRunner,
+    db: QueryRunner,
     userId: number,
     length: number,
   ): Promise<DickProfile> {

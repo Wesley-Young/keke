@@ -2,6 +2,7 @@ import { definePlugin, msg, param, seg } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
+import type { QueryRunner } from '../types/kysely';
 import {
   type CurrencyBalance,
   type CurrencyPatch,
@@ -57,11 +58,6 @@ declare module '@fraqjs/plugin-kysely' {
     fishing_inventory: FishingInventoryRow;
   }
 }
-
-type FishingQueryRunner = Pick<
-  DatabaseService['kysely'],
-  'selectFrom' | 'insertInto' | 'updateTable'
->;
 
 interface FishingItemMeta {
   kind: FishingItemKind;
@@ -226,7 +222,7 @@ function normalizeInventoryPatch(
 }
 
 async function ensureInventoryRow(
-  db: FishingQueryRunner,
+  db: QueryRunner,
   userId: number,
 ): Promise<void> {
   await db
@@ -240,7 +236,7 @@ async function ensureInventoryRow(
 }
 
 async function getInventoryIn(
-  db: FishingQueryRunner,
+  db: QueryRunner,
   userId: number,
 ): Promise<FishingInventory> {
   const row = await db
@@ -253,7 +249,7 @@ async function getInventoryIn(
 }
 
 async function adjustInventoryIn(
-  db: FishingQueryRunner,
+  db: QueryRunner,
   userId: number,
   patch: FishingInventoryPatch,
 ): Promise<FishingInventory> {
@@ -410,7 +406,7 @@ function parseSellFishText(text: string): SellFishTextParseResult {
 }
 
 async function addCurrencySafelyIn(
-  db: FishingQueryRunner,
+  db: QueryRunner,
   currency: CurrencyService,
   userId: number,
   patch: CurrencyPatch,

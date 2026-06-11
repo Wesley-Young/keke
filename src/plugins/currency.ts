@@ -1,6 +1,8 @@
 import { definePlugin } from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 
+import type { QueryRunner } from '../types/kysely';
+
 export const currencyKinds = ['shell', 'stamina', 'charm', 'bomb'] as const;
 
 export type CurrencyKind = (typeof currencyKinds)[number];
@@ -18,11 +20,6 @@ export type CurrencyDelta = Partial<Record<CurrencyKind, number>>;
 export interface CurrencyTransferOptions {
   reason?: string;
 }
-
-export type CurrencyQueryRunner = Pick<
-  DatabaseService['kysely'],
-  'selectFrom' | 'insertInto' | 'updateTable'
->;
 
 export interface CurrencyAccountRow extends CurrencyBalance {
   user_id: number;
@@ -133,10 +130,7 @@ export class CurrencyService {
     return this.getIn(this.db.kysely, userId);
   }
 
-  async getIn(
-    db: CurrencyQueryRunner,
-    userId: number,
-  ): Promise<CurrencyBalance> {
+  async getIn(db: QueryRunner, userId: number): Promise<CurrencyBalance> {
     assertUserId(userId);
 
     const row = await db
@@ -161,7 +155,7 @@ export class CurrencyService {
   }
 
   async ensureIn(
-    db: CurrencyQueryRunner,
+    db: QueryRunner,
     userId: number,
     initial: CurrencyPatch = {},
   ): Promise<CurrencyBalance> {
@@ -190,7 +184,7 @@ export class CurrencyService {
   }
 
   async setIn(
-    db: CurrencyQueryRunner,
+    db: QueryRunner,
     userId: number,
     patch: CurrencyPatch,
   ): Promise<CurrencyBalance> {
@@ -216,7 +210,7 @@ export class CurrencyService {
   }
 
   async adjustIn(
-    db: CurrencyQueryRunner,
+    db: QueryRunner,
     userId: number,
     delta: CurrencyDelta,
   ): Promise<CurrencyBalance> {
@@ -253,7 +247,7 @@ export class CurrencyService {
   }
 
   async addIn(
-    db: CurrencyQueryRunner,
+    db: QueryRunner,
     userId: number,
     patch: CurrencyPatch,
   ): Promise<CurrencyBalance> {
@@ -265,7 +259,7 @@ export class CurrencyService {
   }
 
   async spendIn(
-    db: CurrencyQueryRunner,
+    db: QueryRunner,
     userId: number,
     patch: CurrencyPatch,
   ): Promise<CurrencyBalance> {
@@ -308,7 +302,7 @@ export class CurrencyService {
   }
 
   async transferIn(
-    db: CurrencyQueryRunner,
+    db: QueryRunner,
     fromUserId: number,
     toUserId: number,
     patch: CurrencyPatch,
@@ -365,10 +359,7 @@ export class CurrencyService {
     };
   }
 
-  private async ensureRow(
-    db: CurrencyQueryRunner,
-    userId: number,
-  ): Promise<void> {
+  private async ensureRow(db: QueryRunner, userId: number): Promise<void> {
     await db
       .insertInto(CURRENCY_TABLE)
       .values({
