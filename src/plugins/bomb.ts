@@ -25,7 +25,7 @@ const ACTOR_COOLDOWN_MS = 60 * 1000;
 const MIN_ACTOR_STAMINA = 50;
 const MIN_ACTOR_CHARM = 50;
 
-type BombTierKind = 'poor' | 'middle' | 'rich';
+type BombTierKind = 'poor' | 'middle' | 'rich' | 'wealthy';
 type BombOutcomeKind = 'success' | 'backfire';
 
 interface BombTier {
@@ -120,7 +120,7 @@ const middleTier: BombTier = {
 
 const richTier: BombTier = {
   kind: 'rich',
-  label: '100W以上',
+  label: '100W-250W',
   successWeight: 60,
   backfireWeight: 40,
   stealShell: { min: 80_000, max: 150_000 },
@@ -134,6 +134,22 @@ const richTier: BombTier = {
   muteSeconds: { min: 120, max: 210 },
 };
 
+const xRichTier: BombTier = {
+  kind: 'wealthy',
+  label: '250W以上',
+  successWeight: 50,
+  backfireWeight: 50,
+  stealShell: { min: 200_000, max: 500_000 },
+  backfireShell: { min: 100_000, max: 200_000 },
+  actorSuccessStamina: { min: 35, max: 80 },
+  actorSuccessCharm: { min: 50, max: 120 },
+  targetSuccessStamina: { min: 150, max: 300 },
+  targetSuccessCharm: { min: 180, max: 360 },
+  actorBackfireStamina: { min: 180, max: 360 },
+  actorBackfireCharm: { min: 220, max: 440 },
+  muteSeconds: { min: 120, max: 240 },
+};
+
 function pickTier(targetShell: number): BombTier {
   if (targetShell < 250_000) {
     return poorTier;
@@ -143,7 +159,11 @@ function pickTier(targetShell: number): BombTier {
     return middleTier;
   }
 
-  return richTier;
+  if (targetShell < 2_500_000) {
+    return richTier;
+  }
+
+  return xRichTier;
 }
 
 export class BombService {
