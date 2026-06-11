@@ -709,15 +709,6 @@ export class FishingService {
 
       const catchResult = this.pickCatchResult(paidBalance.shell);
 
-      let nextInventory = inventory;
-      if (catchResult.inventoryPatch) {
-        nextInventory = await adjustInventoryIn(
-          trx,
-          userId,
-          catchResult.inventoryPatch,
-        );
-      }
-
       let nextBalance = paidBalance;
       if (catchResult.currencyPatch) {
         nextBalance = await addCurrencySafelyIn(
@@ -735,7 +726,7 @@ export class FishingService {
         catchResult,
         shellDelta: shellDelta(balance, nextBalance),
         balance: nextBalance,
-        inventory: nextInventory,
+        inventory,
       };
     });
   }
@@ -1144,13 +1135,35 @@ ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
           return;
         }
 
+        const inventory = { ...result.inventory };
+        if (result.catchResult.inventoryPatch) {
+          for (const kind of fishingInventoryKinds) {
+            const change = result.catchResult.inventoryPatch[kind];
+            if (change === undefined) {
+              continue;
+            }
+
+            inventory[kind] += change;
+          }
+        }
+
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${result.catchResult.text}
-当前鱼竿：${result.inventory.rod}
+当前鱼竿：${inventory.rod}
 ${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
 ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
       `);
+
+        if (result.catchResult.inventoryPatch) {
+          await ctx.db.kysely.transaction().execute(async (trx) => {
+            await adjustInventoryIn(
+              trx,
+              message.sender_id,
+              result.catchResult.inventoryPatch ?? {},
+            );
+          });
+        }
       } catch (error) {
         await replyError(session, error, '钓鱼失败');
       } finally {
