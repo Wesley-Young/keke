@@ -224,7 +224,7 @@ export class BombService {
       const target = await this.currency.getIn(trx, targetUserId);
 
       if (actor.bomb < 1) {
-        throw new Error('炸弹不足');
+        throw new Error('炸弹不足\n发送【玩法 炸弹】查看玩法说明');
       }
 
       if (actor.stamina < MIN_ACTOR_STAMINA) {
@@ -391,19 +391,6 @@ export const BombPlugin = definePlugin({
   apply(ctx) {
     const bomb = new BombService(ctx.db, ctx.currency, ctx.random);
     ctx.provide(BombService, bomb);
-
-    ctx.router.command('炸弹说明').execute(async (session) => {
-      const message = session.raw;
-      await session.reply(msg`
-${seg.mention(message.sender_id)}
-炸弹(5W微壳/个)
-使用【炸弹@某人】消耗1个炸弹攻击对方
-每人每1分钟可使用一次
-对方越富有收益越高，但反噬也越重
-对方微壳低于5W时无法攻击
-抢夺的微壳不会超过对方当前财产的20%
-      `);
-    });
 
     ctx.router
       .command('购买炸弹')

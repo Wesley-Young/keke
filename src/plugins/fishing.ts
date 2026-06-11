@@ -644,22 +644,7 @@ export class FishingService {
       const balance = await this.currency.getIn(trx, userId);
 
       if (inventory.rod < 1) {
-        throw new Error(
-          `
-你没有鱼竿，发送【购买鱼竿】可以花5W微壳购买
-
-获得鱼竿后，发送【钓鱼】自动花费1W微壳购买鱼饵
-每次钓鱼消耗${STAMINA_COST_MIN}-${STAMINA_COST_MAX}体力
-体力至少需要${MIN_STAMINA_TO_FISH}
-钓到的鱼可以卖掉换微壳和魅力，发送【卖鱼 物品名】出售
-也可以发送【卖鱼 全部】出售所有的鱼（和物品）
-
-发送【鱼塘】查看能够钓到的鱼（和别的东西）
-发送【鱼库】查看拥有的鱼和鱼竿
-
-鱼塘里有：${formatFishPond()}
-        `.trim(),
-        );
+        throw new Error(`你没有鱼竿\n发送【玩法 钓鱼】查看玩法说明`);
       }
 
       if (balance.shell < BAIT_PRICE) {
