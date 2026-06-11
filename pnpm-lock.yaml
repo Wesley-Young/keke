@@ -34,8 +34,8 @@ importers:
         specifier: ^2.4.16
         version: 2.4.16
       '@fraqjs/takumi-preview':
-        specifier: ^0.1.1
-        version: 0.1.1(@fraqjs/fraq@0.9.0)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7))(react@19.2.7)
+        specifier: ^0.1.2
+        version: 0.1.2(@fraqjs/fraq@0.9.0)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7))(react@19.2.7)
       '@takumi-rs/core':
         specifier: ^1.8.0
         version: 1.8.0(react@19.2.7)
@@ -296,8 +296,8 @@ packages:
       '@fraqjs/fraq': ^0.8.2
       react: ^19.0.0
 
-  '@fraqjs/takumi-preview@0.1.1':
-    resolution: {integrity: sha512-DfFYv2C0PkGOAQDPKgMOmX9qcsAu3Lp5csP6T3mGFk4As2LdJTzDOStWOOqg/4HSE89rXXnHA2JXqEMfqX+Bwg==}
+  '@fraqjs/takumi-preview@0.1.2':
+    resolution: {integrity: sha512-dlQDeyir2j3WAoqWwHcZW183z3Bw9+wY7NtKjRYvymsWnNMzvUPnwPoL9dcpEfPlUbKNuWX8nqmuoBzAt4mwKg==}
     hasBin: true
     peerDependencies:
       '@fraqjs/fraq': ^0.8.2
@@ -652,7 +652,7 @@ snapshots:
     transitivePeerDependencies:
       - react-dom
 
-  '@fraqjs/takumi-preview@0.1.1(@fraqjs/fraq@0.9.0)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7))(react@19.2.7)':
+  '@fraqjs/takumi-preview@0.1.2(@fraqjs/fraq@0.9.0)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@fraqjs/fraq': 0.9.0
       '@fraqjs/plugin-takumi': 0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7)
