@@ -1,11 +1,15 @@
 import { type Context, definePlugin } from '@fraqjs/fraq';
 
-import { config } from '../config';
+import type { Config } from '../config';
+import { ConfigProviderService } from './config-provider';
 
 export class NickService {
   private readonly nickCache = new Map<`${number}:${number}`, string>();
 
-  constructor(private readonly ctx: Context) {
+  constructor(
+    private readonly ctx: Context,
+    private readonly config: Config,
+  ) {
     ctx.on('message_receive', ({ data: message }) => {
       if (message.message_scene !== 'group') {
         return;
@@ -35,7 +39,7 @@ export class NickService {
   }
 
   private async refreshGroups() {
-    for (const groupId of config.enabledGroups) {
+    for (const groupId of this.config.enabledGroups) {
       const { members } = await this.ctx.client.get_group_member_list({
         group_id: groupId,
         no_cache: true,
@@ -54,8 +58,11 @@ export class NickService {
 export const NickPlugin = definePlugin({
   name: 'nick',
   provides: [NickService],
+  inject: {
+    config: ConfigProviderService,
+  },
   apply(ctx) {
-    ctx.provide(NickService, new NickService(ctx));
+    ctx.provide(NickService, new NickService(ctx, ctx.config.get()));
   },
 });
 

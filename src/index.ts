@@ -4,8 +4,9 @@ import KyselyPlugin from '@fraqjs/plugin-kysely';
 import RandomPlugin from '@fraqjs/plugin-random';
 import TakumiPlugin from '@fraqjs/plugin-takumi';
 
-import { config } from './config';
+import { type Config, rootConfig } from './config';
 import BombPlugin from './plugins/bomb';
+import ConfigProviderPlugin from './plugins/config-provider';
 import CurrencyPlugin from './plugins/currency';
 import DickPlugin from './plugins/dick';
 import ExchangePlugin from './plugins/exchange';
@@ -17,39 +18,49 @@ import TransferPlugin from './plugins/transfer';
 import UsagePlugin from './plugins/usage';
 import WifePlugin from './plugins/wife';
 
-const ctx = Context.fromUrl(config.milky.url, {
-  accessToken: config.milky.accessToken,
+const ctx = Context.fromUrl(rootConfig.milky.url, {
+  accessToken: rootConfig.milky.accessToken,
   logHandler: createColoredLogHandler({
     minLevel: 'debug',
   }),
 });
 
 // Official plugins
-ctx.install(KyselyPlugin, {
-  sqliteUrl: './fraq.db',
-});
 ctx.install(RandomPlugin);
 ctx.install(TakumiPlugin);
 
-const keke = ctx.fork('keke', filter.group(...config.enabledGroups));
-const official = keke.fork('official', filter.group(...config.officialGroups));
+function openKekeInstance(name: string, config: Config) {
+  const keke = ctx.fork(name, filter.group(...config.enabledGroups));
+  const official = keke.fork(
+    `${name}-official`,
+    filter.group(...config.officialGroups),
+  );
 
-// Base plugins
-keke.install(CurrencyPlugin);
-keke.install(NickPlugin);
+  // Base plugins
+  keke.install(KyselyPlugin, {
+    sqliteUrl: `./${name}.db`,
+  });
+  keke.install(ConfigProviderPlugin, config);
+  keke.install(CurrencyPlugin);
+  keke.install(NickPlugin);
 
-// Functional plugins
-keke.install(DickPlugin);
-keke.install(ExchangePlugin);
-keke.install(FishingPlugin);
-keke.install(QueryPlugin);
-keke.install(SignInPlugin);
-keke.install(TransferPlugin);
-keke.install(UsagePlugin);
-keke.install(WifePlugin);
+  // Functional plugins
+  keke.install(DickPlugin);
+  keke.install(ExchangePlugin);
+  keke.install(FishingPlugin);
+  keke.install(QueryPlugin);
+  keke.install(SignInPlugin);
+  keke.install(TransferPlugin);
+  keke.install(UsagePlugin);
+  keke.install(WifePlugin);
 
-// Functions only for official groups
-official.install(BombPlugin);
+  // Functions only for official groups
+  official.install(BombPlugin);
+}
+
+for (const [instanceName, config] of Object.entries(rootConfig.instances)) {
+  openKekeInstance(instanceName, config);
+}
 
 ctx.start();
 
