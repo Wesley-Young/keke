@@ -5,6 +5,7 @@ import RandomPlugin from '@fraqjs/plugin-random';
 import TakumiPlugin from '@fraqjs/plugin-takumi';
 
 import { type Config, rootConfig } from './config';
+import BankRobberyPlugin from './plugins/bank-robbery';
 import BombPlugin from './plugins/bomb';
 import ConfigProviderPlugin from './plugins/config-provider';
 import CurrencyPlugin from './plugins/currency';
@@ -57,6 +58,7 @@ function registerInstance(name: string, config: Config) {
   keke.install(WifePlugin);
 
   // Functions only for official groups
+  official.install(BankRobberyPlugin);
   official.install(BombPlugin);
 }
 
