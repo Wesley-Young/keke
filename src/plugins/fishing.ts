@@ -1,4 +1,11 @@
-import { definePlugin, msg, param, type Session, seg } from '@fraqjs/fraq';
+import {
+  type Disposable,
+  definePlugin,
+  msg,
+  param,
+  type Session,
+  seg,
+} from '@fraqjs/fraq';
 import { DatabaseService } from '@fraqjs/plugin-kysely';
 import { RandomService } from '@fraqjs/plugin-random';
 
@@ -172,7 +179,27 @@ type FishingFishResult =
       shellDelta: number;
       balance: CurrencyBalance;
       inventory: FishingInventory;
+      thiefEvent?: FishingThiefEvent;
+    }
+  | {
+      outcome: 'interrupted';
+      staminaCost: number;
+      charm: number;
+      shellDelta: number;
+      balance: CurrencyBalance;
+      inventory: FishingInventory;
     };
+
+type FishingWaitResolution = 'settle' | 'forfeit';
+
+interface FishingWaitRecord {
+  wait: Promise<FishingWaitResolution>;
+  operation?: Promise<unknown>;
+  start(waitMs: number): void;
+  finish(resolution: FishingWaitResolution): void;
+}
+
+type FishingWaitStartedHandler = () => Promise<void> | void;
 
 type SellShellRule =
   | {
@@ -846,13 +873,51 @@ function shellDelta(before: CurrencyBalance, after: CurrencyBalance): number {
   return after.shell - before.shell;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
+function createFishingWaitRecord(): FishingWaitRecord {
+  let finished = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let resolveWait: (resolution: FishingWaitResolution) => void = () => {};
+
+  const wait = new Promise<FishingWaitResolution>((resolve) => {
+    resolveWait = resolve;
   });
+
+  const finish = (resolution: FishingWaitResolution) => {
+    if (finished) {
+      return;
+    }
+
+    finished = true;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    resolveWait(resolution);
+  };
+
+  return {
+    wait,
+    start(waitMs) {
+      if (finished) {
+        return;
+      }
+
+      timer = setTimeout(() => finish('settle'), waitMs);
+    },
+    finish,
+  };
 }
 
-export class FishingService {
+class AlreadyFishingError extends Error {
+  constructor() {
+    super('Already fishing');
+  }
+}
+
+export class FishingService implements Disposable {
+  private readonly fishingWaits = new Map<number, FishingWaitRecord>();
+  private disposing = false;
+
   constructor(
     private readonly db: DatabaseService,
     private readonly currency: CurrencyService,
@@ -890,9 +955,76 @@ export class FishingService {
     });
   }
 
-  async fish(userId: number): Promise<FishingFishResult> {
+  async fish(
+    userId: number,
+    onWaitStarted?: FishingWaitStartedHandler,
+  ): Promise<FishingFishResult> {
     assertUserId(userId);
 
+    if (this.disposing) {
+      throw new Error('机器人正在关闭维护，请稍候再钓鱼');
+    }
+
+    if (this.fishingWaits.has(userId)) {
+      throw new AlreadyFishingError();
+    }
+
+    const waitRecord = createFishingWaitRecord();
+    this.fishingWaits.set(userId, waitRecord);
+
+    const operation = this.fishWithWait(userId, waitRecord, onWaitStarted);
+    waitRecord.operation = operation;
+
+    try {
+      return await operation;
+    } finally {
+      waitRecord.finish('settle');
+      this.fishingWaits.delete(userId);
+    }
+  }
+
+  isFishing(userId: number): boolean {
+    assertUserId(userId);
+
+    return this.fishingWaits.has(userId);
+  }
+
+  async dispose(): Promise<void> {
+    this.disposing = true;
+
+    const waits = [...this.fishingWaits.values()];
+    for (const wait of waits) {
+      wait.finish('settle');
+    }
+
+    await Promise.allSettled(
+      waits.flatMap((wait) => (wait.operation ? [wait.operation] : [])),
+    );
+  }
+
+  forfeitAllWaitingFish(): number {
+    const waits = [...this.fishingWaits.values()];
+    for (const wait of waits) {
+      wait.finish('forfeit');
+    }
+
+    return waits.length;
+  }
+
+  private async fishWithWait(
+    userId: number,
+    waitRecord: FishingWaitRecord,
+    onWaitStarted?: FishingWaitStartedHandler,
+  ): Promise<FishingFishResult> {
+    const result = await this.castLine(userId);
+    await this.notifyWaitStarted(onWaitStarted);
+    waitRecord.start(this.pickWaitMs(result.charm));
+    const resolution = await waitRecord.wait;
+
+    return this.settleFishResult(userId, result, resolution);
+  }
+
+  private async castLine(userId: number): Promise<FishingFishResult> {
     return this.db.kysely.transaction().execute(async (trx) => {
       await ensureInventoryRow(trx, userId);
 
@@ -934,16 +1066,12 @@ export class FishingService {
       }
 
       if (hookOutcome === 'yarn') {
-        const nextBalance = await this.currency.addIn(trx, userId, {
-          shell: YARN_REWARD,
-        });
-
         return {
           outcome: 'yarn' as const,
           staminaCost,
           charm: paidBalance.charm,
-          shellDelta: shellDelta(balance, nextBalance),
-          balance: nextBalance,
+          shellDelta: shellDelta(balance, paidBalance),
+          balance: paidBalance,
           inventory,
         };
       }
@@ -953,26 +1081,96 @@ export class FishingService {
         paidBalance.shell,
       );
 
-      let nextBalance = paidBalance;
-      if (catchResult.currencyPatch) {
-        nextBalance = await addCurrencySafelyIn(
-          trx,
-          this.currency,
-          userId,
-          catchResult.currencyPatch,
-        );
-      }
-
       return {
         outcome: 'catch' as const,
         staminaCost,
         charm: paidBalance.charm,
         catchResult,
-        shellDelta: shellDelta(balance, nextBalance),
-        balance: nextBalance,
+        shellDelta: shellDelta(balance, paidBalance),
+        balance: paidBalance,
         inventory,
       };
     });
+  }
+
+  private async settleFishResult(
+    userId: number,
+    result: FishingFishResult,
+    resolution: FishingWaitResolution,
+  ): Promise<FishingFishResult> {
+    if (resolution === 'forfeit') {
+      return {
+        outcome: 'interrupted',
+        staminaCost: result.staminaCost,
+        charm: result.charm,
+        shellDelta: result.shellDelta,
+        balance: result.balance,
+        inventory: result.inventory,
+      };
+    }
+
+    if (result.outcome === 'yarn') {
+      const nextBalance = await this.currency.add(userId, {
+        shell: YARN_REWARD,
+      });
+
+      return {
+        ...result,
+        shellDelta: result.shellDelta + shellDelta(result.balance, nextBalance),
+        balance: nextBalance,
+      };
+    }
+
+    if (result.outcome !== 'catch') {
+      return result;
+    }
+
+    let nextBalance = result.balance;
+    if (result.catchResult.currencyPatch) {
+      nextBalance = await addCurrencySafelyIn(
+        this.db.kysely,
+        this.currency,
+        userId,
+        result.catchResult.currencyPatch,
+      );
+    }
+
+    if (!result.catchResult.inventoryPatch) {
+      return {
+        ...result,
+        shellDelta: result.shellDelta + shellDelta(result.balance, nextBalance),
+        balance: nextBalance,
+      };
+    }
+
+    const inventoryResult = await this.applyCatchInventory(
+      userId,
+      result.catchResult.inventoryPatch,
+    );
+
+    return {
+      ...result,
+      shellDelta: result.shellDelta + shellDelta(result.balance, nextBalance),
+      balance: nextBalance,
+      inventory: inventoryResult.inventory,
+      thiefEvent: inventoryResult.thiefEvent,
+    };
+  }
+
+  private pickWaitMs(charm: number): number {
+    return charm >= CHARM_HOOK_THRESHOLD
+      ? this.random.range(HIGH_CHARM_WAIT_MIN_MS, HIGH_CHARM_WAIT_MAX_MS)
+      : this.random.range(LOW_CHARM_WAIT_MIN_MS, LOW_CHARM_WAIT_MAX_MS);
+  }
+
+  private async notifyWaitStarted(
+    onWaitStarted?: FishingWaitStartedHandler,
+  ): Promise<void> {
+    try {
+      await onWaitStarted?.();
+    } catch (error) {
+      void error;
+    }
   }
 
   async applyCatchInventory(
@@ -1376,7 +1574,6 @@ export const FishingPlugin = definePlugin({
   },
   apply(ctx) {
     const fishing = new FishingService(ctx.db, ctx.currency, ctx.random);
-    const fishingUserIds = new Set<number>();
     const replyError = async (
       session: Session,
       error: unknown,
@@ -1486,27 +1683,15 @@ ${formatCurrencyChange('微壳', result.balance.shell, -ROD_PRICE)}
 
     ctx.router.command('钓鱼').execute(async (session) => {
       const message = session.raw;
-      if (fishingUserIds.has(message.sender_id)) {
-        return;
-      }
-
-      fishingUserIds.add(message.sender_id);
 
       try {
-        const result = await fishing.fish(message.sender_id);
-
-        await ctx.client.send_group_message_reaction({
-          group_id: message.peer_id,
-          message_seq: message.message_seq,
-          reaction: '424',
+        const result = await fishing.fish(message.sender_id, async () => {
+          await ctx.client.send_group_message_reaction({
+            group_id: message.peer_id,
+            message_seq: message.message_seq,
+            reaction: '424',
+          });
         });
-
-        const waitMs =
-          result.charm >= CHARM_HOOK_THRESHOLD
-            ? ctx.random.range(HIGH_CHARM_WAIT_MIN_MS, HIGH_CHARM_WAIT_MAX_MS)
-            : ctx.random.range(LOW_CHARM_WAIT_MIN_MS, LOW_CHARM_WAIT_MAX_MS);
-
-        await sleep(waitMs);
 
         if (result.outcome === 'empty') {
           await session.reply(msg`
@@ -1528,43 +1713,37 @@ ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
           return;
         }
 
-        const inventory = { ...result.inventory };
-        if (result.catchResult.inventoryPatch) {
-          for (const kind of fishingInventoryKinds) {
-            const change = result.catchResult.inventoryPatch[kind];
-            if (change === undefined) {
-              continue;
-            }
-
-            inventory[kind] += change;
-          }
+        if (result.outcome === 'interrupted') {
+          await session.reply(msg`
+${seg.mention(message.sender_id)}
+有人炸鱼，你什么都没钓到就被迫收竿了
+${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
+${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
+        `);
+          return;
         }
 
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${result.catchResult.text}
-当前鱼竿：${inventory.rod}
+当前鱼竿：${result.inventory.rod}
 ${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
 ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
       `);
 
-        if (result.catchResult.inventoryPatch) {
-          const inventoryResult = await fishing.applyCatchInventory(
-            message.sender_id,
-            result.catchResult.inventoryPatch,
-          );
-          const thiefText = formatThiefEvent(inventoryResult.thiefEvent);
-          if (thiefText) {
-            await session.reply(msg`
+        const thiefText = formatThiefEvent(result.thiefEvent);
+        if (thiefText) {
+          await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${thiefText}
             `);
-          }
         }
       } catch (error) {
+        if (error instanceof AlreadyFishingError) {
+          return;
+        }
+
         await replyError(session, error, '钓鱼失败');
-      } finally {
-        fishingUserIds.delete(message.sender_id);
       }
     });
 
