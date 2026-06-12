@@ -67,7 +67,7 @@ export default function BombUsageCard() {
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              ['01', '补货', '发送【购买炸弹】购买炸弹，5W微壳/个'],
+              ['01', '补货', '发送【购买炸弹 数量】购买炸弹，5W微壳/个'],
               [
                 '02',
                 '开火',
