@@ -5,7 +5,10 @@
   "description": "Keke the DiHuang Bot",
   "main": "index.js",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "check": "pnpm exec biome check . && pnpm exec tsc --noEmit && pnpm test"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +25,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
+    "@fraqjs/mock": "^0.1.0",
     "@fraqjs/takumi-preview": "^0.1.2",
     "@takumi-rs/core": "^1.8.0",
     "@types/node": "^25.9.2",

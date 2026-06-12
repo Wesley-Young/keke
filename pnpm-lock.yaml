@@ -33,6 +33,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.4.16
         version: 2.4.16
+      '@fraqjs/mock':
+        specifier: ^0.1.0
+        version: 0.1.0(@fraqjs/fraq@0.9.1)
       '@fraqjs/takumi-preview':
         specifier: ^0.1.2
         version: 0.1.2(@fraqjs/fraq@0.9.1)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.1)(react@19.2.7))(react@19.2.7)
@@ -278,6 +281,11 @@ packages:
   '@fraqjs/fraq@0.9.1':
     resolution: {integrity: sha512-t8pI/vo5lhPeIrXkNZFo3xDA3v1e4z92jW1a7CtGCYYRmLwqf6Gqxc+Cf3MBsn3IObR+rvqX/W7YbJDWX26+vw==}
     engines: {node: '>=22'}
+
+  '@fraqjs/mock@0.1.0':
+    resolution: {integrity: sha512-Gzkfj/A6AIyaCwntQfXCTMhW3ztvq/dOrEoxLSJILEEKlb4J5petFGyQvRW8B4KFlcBgBx3BKVrEanr7uPUdrg==}
+    peerDependencies:
+      '@fraqjs/fraq': ^0.6.0
 
   '@fraqjs/plugin-kysely@0.1.2':
     resolution: {integrity: sha512-cUqYaWvfREJziq/2h87kCvrlCN6dyeGa0cnLk2CgtzHjRGJDQNRKW38QzbwoJ/0b+wf9F9S/XAHluVb36IegHg==}
@@ -633,6 +641,10 @@ snapshots:
   '@fraqjs/fraq@0.9.1':
     dependencies:
       mitt: 3.0.1
+
+  '@fraqjs/mock@0.1.0(@fraqjs/fraq@0.9.1)':
+    dependencies:
+      '@fraqjs/fraq': 0.9.1
 
   '@fraqjs/plugin-kysely@0.1.2(@fraqjs/fraq@0.9.1)':
     dependencies:

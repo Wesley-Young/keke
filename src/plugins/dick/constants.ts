@@ -1,0 +1,13 @@
+export const DICK_PROFILE_TABLE = 'dick_profiles' as const;
+export const CUT_PRICE = 2_000_000;
+export const PURCHASE_PRICE_PER_UNIT = 3_000;
+export const INITIAL_LENGTH_MIN = 30;
+export const INITIAL_LENGTH_MAX = 1600;
+export const SINGLE_ACTION_STAMINA_COST_MIN = 10;
+export const SINGLE_ACTION_STAMINA_COST_MAX = 20;
+export const DUEL_REQUIRED_STAMINA = 100;
+export const DUEL_ACTION_STAMINA_COST_MIN = 10;
+export const DUEL_ACTION_STAMINA_COST_MAX = 20;
+export const RANKING_LIMIT = 5;
+export const RATE_LIMIT_MS = 30_000;
+export const RATE_LIMIT_REACTION = '38';
