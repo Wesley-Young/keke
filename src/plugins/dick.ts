@@ -78,7 +78,7 @@ interface DuelResult {
   targetStaminaLeft: number;
 }
 
-type DuelMode = 'seduce' | 'fence' | 'top';
+type DuelMode = 'seduce' | 'fence' | 'top' | 'grind';
 
 type LengthActionValueKind = 'delta' | 'percent' | 'none';
 
@@ -814,6 +814,10 @@ export class DickService {
     if (mode === 'top' && !(actor.length > 0 && target.length < 0)) {
       throw new Error(createInvalidStateMessage('撅', '需要你为正、对方为负'));
     }
+
+    if (mode === 'grind' && !(actor.length < 0 && target.length < 0)) {
+      throw new Error(createInvalidStateMessage('磨豆腐', '需要双方都为负'));
+    }
   }
 }
 
@@ -1104,6 +1108,13 @@ ${error instanceof Error ? error.message : fallback}
       .arg('target', param.segment('mention'))
       .execute((session, { target }) =>
         handleDuel(session, target.data.user_id, 'top', '撅失败'),
+      );
+
+    ctx.router
+      .command('磨豆腐')
+      .arg('target', param.segment('mention'))
+      .execute((session, { target }) =>
+        handleDuel(session, target.data.user_id, 'grind', '磨豆腐失败'),
       );
 
     ctx.router.command('牛牛排行榜').execute(async (session) => {
