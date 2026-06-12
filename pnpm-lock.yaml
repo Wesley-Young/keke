@@ -10,19 +10,19 @@ importers:
     dependencies:
       '@fraqjs/color-log':
         specifier: ^0.2.0
-        version: 0.2.0(@fraqjs/fraq@0.9.0)
+        version: 0.2.0(@fraqjs/fraq@0.9.1)
       '@fraqjs/fraq':
-        specifier: ^0.9.0
-        version: 0.9.0
+        specifier: ^0.9.1
+        version: 0.9.1
       '@fraqjs/plugin-kysely':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.9.0)
+        version: 0.1.2(@fraqjs/fraq@0.9.1)
       '@fraqjs/plugin-random':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.9.0)
+        version: 0.1.2(@fraqjs/fraq@0.9.1)
       '@fraqjs/plugin-takumi':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7)
+        version: 0.1.2(@fraqjs/fraq@0.9.1)(react@19.2.7)
       react:
         specifier: ^19.2.7
         version: 19.2.7
@@ -35,7 +35,7 @@ importers:
         version: 2.4.16
       '@fraqjs/takumi-preview':
         specifier: ^0.1.2
-        version: 0.1.2(@fraqjs/fraq@0.9.0)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7))(react@19.2.7)
+        version: 0.1.2(@fraqjs/fraq@0.9.1)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.1)(react@19.2.7))(react@19.2.7)
       '@takumi-rs/core':
         specifier: ^1.8.0
         version: 1.8.0(react@19.2.7)
@@ -275,8 +275,8 @@ packages:
     peerDependencies:
       '@fraqjs/fraq': ^0.3.3
 
-  '@fraqjs/fraq@0.9.0':
-    resolution: {integrity: sha512-rpNU9aoaLAb5TSLqcQWHdDpN3/jtVC05M2YdklPwLHZ3vPlgP/E8BbQZRdwYOMZl16OQxKAp8vQmrPPjNnvPpA==}
+  '@fraqjs/fraq@0.9.1':
+    resolution: {integrity: sha512-t8pI/vo5lhPeIrXkNZFo3xDA3v1e4z92jW1a7CtGCYYRmLwqf6Gqxc+Cf3MBsn3IObR+rvqX/W7YbJDWX26+vw==}
     engines: {node: '>=22'}
 
   '@fraqjs/plugin-kysely@0.1.2':
@@ -625,37 +625,37 @@ snapshots:
   '@esbuild/win32-x64@0.28.0':
     optional: true
 
-  '@fraqjs/color-log@0.2.0(@fraqjs/fraq@0.9.0)':
+  '@fraqjs/color-log@0.2.0(@fraqjs/fraq@0.9.1)':
     dependencies:
-      '@fraqjs/fraq': 0.9.0
+      '@fraqjs/fraq': 0.9.1
       chalk: 5.6.2
 
-  '@fraqjs/fraq@0.9.0':
+  '@fraqjs/fraq@0.9.1':
     dependencies:
       mitt: 3.0.1
 
-  '@fraqjs/plugin-kysely@0.1.2(@fraqjs/fraq@0.9.0)':
+  '@fraqjs/plugin-kysely@0.1.2(@fraqjs/fraq@0.9.1)':
     dependencies:
-      '@fraqjs/fraq': 0.9.0
+      '@fraqjs/fraq': 0.9.1
       kysely: 0.29.2
 
-  '@fraqjs/plugin-random@0.1.2(@fraqjs/fraq@0.9.0)':
+  '@fraqjs/plugin-random@0.1.2(@fraqjs/fraq@0.9.1)':
     dependencies:
-      '@fraqjs/fraq': 0.9.0
+      '@fraqjs/fraq': 0.9.1
 
-  '@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7)':
+  '@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.1)(react@19.2.7)':
     dependencies:
-      '@fraqjs/fraq': 0.9.0
+      '@fraqjs/fraq': 0.9.1
       '@takumi-rs/core': 1.7.0(react@19.2.7)
       '@takumi-rs/helpers': 1.7.0(react@19.2.7)
       react: 19.2.7
     transitivePeerDependencies:
       - react-dom
 
-  '@fraqjs/takumi-preview@0.1.2(@fraqjs/fraq@0.9.0)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7))(react@19.2.7)':
+  '@fraqjs/takumi-preview@0.1.2(@fraqjs/fraq@0.9.1)(@fraqjs/plugin-takumi@0.1.2(@fraqjs/fraq@0.9.1)(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@fraqjs/fraq': 0.9.0
-      '@fraqjs/plugin-takumi': 0.1.2(@fraqjs/fraq@0.9.0)(react@19.2.7)
+      '@fraqjs/fraq': 0.9.1
+      '@fraqjs/plugin-takumi': 0.1.2(@fraqjs/fraq@0.9.1)(react@19.2.7)
       '@hono/node-server': 2.0.4(hono@4.12.25)
       chokidar: 5.0.0
       commander: 15.0.0

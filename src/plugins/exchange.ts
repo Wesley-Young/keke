@@ -149,17 +149,6 @@ ${formatCurrencyChange(rate.label, result.balance[target], result.amount)}
       .execute((session, { amount }) =>
         handleExchange(session, 'charm', amount),
       );
-
-    ctx.router.command('货币声明').execute(async (session) => {
-      const message = session.raw;
-
-      await session.reply(msg`
-${seg.mention(message.sender_id)}
-100微壳=5魅力=2体力
-微壳是日常生活中最通用的货币
-小壳已经退出货币舞台，一切功能都被微壳代替
-      `);
-    });
   },
 });
 
