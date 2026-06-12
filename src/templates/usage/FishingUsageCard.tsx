@@ -190,7 +190,78 @@ export default function FishingUsageCard() {
                   <span style={{ fontWeight: 800 }}>卖鱼 全部</span>
                   】一次卖掉所有收获
                 </div>
+                <div
+                  style={{ fontSize: 16, lineHeight: 1.5, color: '#667085' }}
+                >
+                  鱼库囤太满可能遭窃，及时卖鱼可以降低被偷风险
+                </div>
               </div>
+            </div>
+          </div>
+          <div
+            style={{
+              gridColumn: '1 / -1',
+              backgroundColor: '#fff7f7',
+              border: '2px solid #ef9a9a',
+              borderRadius: 8,
+              padding: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 800,
+                marginBottom: 10,
+                color: '#b42318',
+              }}
+            >
+              炸鱼
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 12,
+              }}
+            >
+              {[
+                ['效果', '强制让正在钓鱼的人无功而返'],
+                ['消耗', '需要1个炸弹、50体力和50魅力'],
+                ['代价', '自己被禁言3-5分钟，冷却时间10分钟'],
+              ].map(([title, text]) => (
+                <div
+                  key={title}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    border: '2px solid #f4b6b6',
+                    borderRadius: 8,
+                    padding: 12,
+                    minHeight: 86,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 15,
+                      fontWeight: 800,
+                      marginBottom: 6,
+                      color: '#b42318',
+                    }}
+                  >
+                    {title}
+                  </div>
+                  <div style={{ fontSize: 17, lineHeight: 1.45 }}>{text}</div>
+                </div>
+              ))}
+            </div>
+            <div
+              style={{
+                fontSize: 16,
+                lineHeight: 1.5,
+                marginTop: 10,
+                color: '#667085',
+              }}
+            >
+              需要有人正在钓鱼才会成功，且仅限在官方群使用
             </div>
           </div>
         </div>
