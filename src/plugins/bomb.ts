@@ -25,7 +25,13 @@ const ACTOR_COOLDOWN_MS = 60 * 1000;
 const MIN_ACTOR_STAMINA = 50;
 const MIN_ACTOR_CHARM = 50;
 
-type BombTierKind = 'poor' | 'middle' | 'rich' | 'wealthy';
+type BombTierKind =
+  | 'poor'
+  | 'middle'
+  | 'rich'
+  | 'wealthy'
+  | 'ultra_wealthy'
+  | 'super_wealthy';
 type BombOutcomeKind = 'success' | 'backfire';
 
 interface BombTier {
@@ -136,7 +142,7 @@ const richTier: BombTier = {
 
 const xRichTier: BombTier = {
   kind: 'wealthy',
-  label: '250W以上',
+  label: '250W-500W',
   successWeight: 50,
   backfireWeight: 50,
   stealShell: { min: 200_000, max: 500_000 },
@@ -148,6 +154,38 @@ const xRichTier: BombTier = {
   actorBackfireStamina: { min: 180, max: 360 },
   actorBackfireCharm: { min: 220, max: 440 },
   muteSeconds: { min: 120, max: 240 },
+};
+
+const ultraRichTier: BombTier = {
+  kind: 'ultra_wealthy',
+  label: '500W-1000W',
+  successWeight: 45,
+  backfireWeight: 55,
+  stealShell: { min: 400_000, max: 1_000_000 },
+  backfireShell: { min: 200_000, max: 500_000 },
+  actorSuccessStamina: { min: 50, max: 120 },
+  actorSuccessCharm: { min: 80, max: 200 },
+  targetSuccessStamina: { min: 300, max: 600 },
+  targetSuccessCharm: { min: 360, max: 720 },
+  actorBackfireStamina: { min: 300, max: 600 },
+  actorBackfireCharm: { min: 400, max: 800 },
+  muteSeconds: { min: 180, max: 300 },
+};
+
+const superRichTier: BombTier = {
+  kind: 'super_wealthy',
+  label: '1000W以上',
+  successWeight: 40,
+  backfireWeight: 60,
+  stealShell: { min: 1_000_000, max: 2_000_000 },
+  backfireShell: { min: 200_000, max: 1_000_000 },
+  actorSuccessStamina: { min: 50, max: 120 },
+  actorSuccessCharm: { min: 80, max: 200 },
+  targetSuccessStamina: { min: 300, max: 600 },
+  targetSuccessCharm: { min: 360, max: 720 },
+  actorBackfireStamina: { min: 300, max: 600 },
+  actorBackfireCharm: { min: 400, max: 800 },
+  muteSeconds: { min: 180, max: 300 },
 };
 
 function pickTier(targetShell: number): BombTier {
@@ -163,7 +201,15 @@ function pickTier(targetShell: number): BombTier {
     return richTier;
   }
 
-  return xRichTier;
+  if (targetShell < 5_000_000) {
+    return xRichTier;
+  }
+
+  if (targetShell < 10_000_000) {
+    return ultraRichTier;
+  }
+
+  return superRichTier;
 }
 
 export class BombService {
