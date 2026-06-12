@@ -131,6 +131,57 @@ export default function DickUsageCard() {
           <div
             style={{
               gridColumn: '1 / -1',
+              backgroundColor: '#fffaf0',
+              border: '2px solid #f4c067',
+              borderRadius: 8,
+              padding: 14,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 16,
+                fontWeight: 800,
+                marginBottom: 10,
+              }}
+            >
+              消费
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 12,
+              }}
+            >
+              <div style={{ fontSize: 17, lineHeight: 1.5 }}>
+                发送【
+                <span style={{ fontWeight: 800 }}>购买长度 10</span>
+                】增加
+                <span style={{ fontWeight: 800 }}>0.10cm</span>。
+              </div>
+              <div style={{ fontSize: 17, lineHeight: 1.5 }}>
+                发送【
+                <span style={{ fontWeight: 800 }}>购买深度 10</span>
+                】减少
+                <span style={{ fontWeight: 800 }}>0.10cm</span>。
+              </div>
+            </div>
+            <div
+              style={{
+                fontSize: 17,
+                lineHeight: 1.5,
+                marginTop: 10,
+              }}
+            >
+              价格为
+              <span style={{ fontWeight: 800 }}>30W微壳/厘米</span>
+              ，数量必须是正整数。
+            </div>
+          </div>
+
+          <div
+            style={{
+              gridColumn: '1 / -1',
               backgroundColor: '#ffffff',
               border: '2px solid #c9efdb',
               borderRadius: 8,

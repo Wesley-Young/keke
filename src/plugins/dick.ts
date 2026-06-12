@@ -20,6 +20,7 @@ import { NickService } from './nick';
 
 const DICK_PROFILE_TABLE = 'dick_profiles' as const;
 const CUT_PRICE = 100_000;
+const PURCHASE_PRICE_PER_UNIT = 3_000;
 const INITIAL_LENGTH_MIN = 30;
 const INITIAL_LENGTH_MAX = 1600;
 const SINGLE_ACTION_STAMINA_COST_MIN = 10;
@@ -54,6 +55,16 @@ interface LengthChangeResult {
   detail: string;
   staminaCost: number;
   staminaLeft: number;
+}
+
+interface PurchaseLengthResult {
+  ok: boolean;
+  reason?: 'not_registered' | 'insufficient_shell';
+  amount: number;
+  lengthDelta: number;
+  cost: number;
+  shell: number;
+  profile?: DickProfile;
 }
 
 interface DuelResult {
@@ -179,6 +190,18 @@ function multiplyByPercent(length: number, percent: number): number {
 
 function divideByPercent(length: number, percent: number): number {
   return Math.trunc((length * 100) / percent);
+}
+
+function normalizePurchaseAmount(amount: number): number | undefined {
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    return;
+  }
+
+  if (!Number.isSafeInteger(amount * PURCHASE_PRICE_PER_UNIT)) {
+    return;
+  }
+
+  return amount;
 }
 
 const masturbateOutcomes: readonly LengthActionRule[] = [
@@ -450,6 +473,68 @@ export class DickService {
       return {
         ok: true,
         shell: nextBalance.shell,
+      };
+    });
+  }
+
+  async purchaseLength(
+    userId: number,
+    amount: number,
+    direction: 1 | -1,
+  ): Promise<PurchaseLengthResult> {
+    assertUserId(userId);
+
+    const normalizedAmount = normalizePurchaseAmount(amount);
+    if (normalizedAmount === undefined) {
+      throw new RangeError('purchase amount must be a positive safe integer');
+    }
+
+    const cost = normalizedAmount * PURCHASE_PRICE_PER_UNIT;
+    const lengthDelta = normalizedAmount * direction;
+
+    return this.db.kysely.transaction().execute(async (trx) => {
+      const profile = await this.getIn(trx, userId);
+      if (!profile) {
+        const balance = await this.currency.getIn(trx, userId);
+        return {
+          ok: false,
+          reason: 'not_registered' as const,
+          amount: normalizedAmount,
+          lengthDelta,
+          cost,
+          shell: balance.shell,
+        };
+      }
+
+      const balance = await this.currency.getIn(trx, userId);
+      if (balance.shell < cost) {
+        return {
+          ok: false,
+          reason: 'insufficient_shell' as const,
+          amount: normalizedAmount,
+          lengthDelta,
+          cost,
+          shell: balance.shell,
+        };
+      }
+
+      const nextLength = profile.length + lengthDelta;
+      if (!Number.isSafeInteger(nextLength)) {
+        throw new RangeError('next length must be a safe integer');
+      }
+
+      const nextBalance = await this.currency.spendIn(trx, userId, {
+        shell: cost,
+      });
+      const nextProfile = await this.setLengthIn(trx, userId, nextLength);
+
+      return {
+        ok: true,
+        amount: normalizedAmount,
+        lengthDelta,
+        cost,
+        shell: nextBalance.shell,
+        profile: nextProfile,
       };
     });
   }
@@ -852,6 +937,68 @@ ${seg.mention(message.sender_id)}
 ${formatCurrencyChange('微壳', result.shell ?? 0, -CUT_PRICE)}
       `);
     });
+
+    const handlePurchaseLength = async (
+      session: Session,
+      amount: number,
+      direction: 1 | -1,
+    ) => {
+      const message = session.raw;
+      const normalizedAmount = normalizePurchaseAmount(amount);
+      const label = direction > 0 ? '长度' : '深度';
+
+      if (normalizedAmount === undefined) {
+        await session.reply(msg`
+${seg.mention(message.sender_id)}
+购买${label}数量必须是正整数
+        `);
+        return;
+      }
+
+      const result = await dick.purchaseLength(
+        message.sender_id,
+        normalizedAmount,
+        direction,
+      );
+
+      if (!result.ok && result.reason === 'not_registered') {
+        await session.reply(msg`
+${seg.mention(message.sender_id)}
+你还没注册，请先发送【注册牛牛】
+        `);
+        return;
+      }
+
+      if (!result.ok && result.reason === 'insufficient_shell') {
+        await session.reply(msg`
+${seg.mention(message.sender_id)}
+微壳不足，购买${formatLength(result.amount)}${label}需要${result.cost}微壳
+当前微壳：${result.shell}
+        `);
+        return;
+      }
+
+      await session.reply(msg`
+${seg.mention(message.sender_id)}
+购买${label}成功，${direction > 0 ? '增加' : '减少'}${formatDelta(result.lengthDelta)}
+目前长度：${formatLength(result.profile?.length ?? 0)}
+${formatCurrencyChange('微壳', result.shell, -result.cost)}
+      `);
+    };
+
+    ctx.router
+      .command('购买长度')
+      .arg('amount', param.num())
+      .execute((session, { amount }) =>
+        handlePurchaseLength(session, amount, 1),
+      );
+
+    ctx.router
+      .command('购买深度')
+      .arg('amount', param.num())
+      .execute((session, { amount }) =>
+        handlePurchaseLength(session, amount, -1),
+      );
 
     ctx.router.command('打搅').execute(async (session) => {
       const message = session.raw;
