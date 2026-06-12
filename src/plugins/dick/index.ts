@@ -10,15 +10,18 @@ import {
   formatCurrencyDelta,
 } from '../currency';
 import { NickService } from '../nick';
+import { DICK_PROFILE_TABLE } from './repository';
 import {
   CUT_PRICE,
-  DICK_PROFILE_TABLE,
-  RATE_LIMIT_REACTION,
-} from './constants';
-import { formatDelta, formatLength, normalizePurchaseAmount } from './rules';
+  formatDelta,
+  formatLength,
+  normalizePurchaseAmount,
+} from './rules';
 import { DickService } from './service';
 import type { DuelMode } from './types';
 import { DickRateLimitError } from './types';
+
+const RATE_LIMIT_REACTION = '38';
 
 export const DickPlugin = definePlugin({
   name: 'dick',
@@ -354,7 +357,6 @@ ${error instanceof Error ? error.message : fallback}
   },
 });
 
-export * from './constants';
 export * from './messages';
 export * from './repository';
 export * from './rules';

@@ -1,6 +1,6 @@
 import type { CurrencyBalance } from '../currency';
 import { formatCurrencyChange } from '../currency';
-import { fishingItems } from './items';
+import { fishingItems } from './rules';
 import type { FishingInventory, FishingThiefEvent } from './types';
 
 export function repeatString(str: string, count: number): string {

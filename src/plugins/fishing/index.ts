@@ -6,19 +6,17 @@ import { formatDurationMs, formatDurationSeconds } from '../../util/rules';
 import { ConfigProviderService } from '../config-provider';
 import { CurrencyService, formatCurrencyChange } from '../currency';
 import {
-  FISHING_INVENTORY_TABLE,
-  FISHING_THIEF_WARNING_TABLE,
-  ROD_PRICE,
-  YARN_REWARD,
-} from './constants';
-import {
   formatFishPond,
   formatInventory,
   formatSellCurrencyChanges,
   formatSellEvents,
   formatThiefEvent,
 } from './messages';
-import { parseSellFishText } from './rules';
+import {
+  FISHING_INVENTORY_TABLE,
+  FISHING_THIEF_WARNING_TABLE,
+} from './repository';
+import { parseSellFishText, ROD_PRICE, YARN_REWARD } from './rules';
 import { FishingService } from './service';
 import { AlreadyFishingError, FishingBombRateLimitError } from './types';
 
@@ -354,11 +352,10 @@ ${formatFishPond()}
   },
 });
 
-export * from './constants';
-export { fishingItems } from './items';
 export * from './messages';
 export * from './repository';
 export * from './rules';
+export { fishingItems } from './rules';
 export { FishingService } from './service';
 export * from './types';
 

@@ -3,18 +3,6 @@ import type { RandomService } from '@fraqjs/plugin-random';
 
 import { assertUserId } from '../../util/rules';
 import type { CurrencyService } from '../currency';
-import {
-  CUT_PRICE,
-  DUEL_ACTION_STAMINA_COST_MAX,
-  DUEL_ACTION_STAMINA_COST_MIN,
-  DUEL_REQUIRED_STAMINA,
-  INITIAL_LENGTH_MAX,
-  INITIAL_LENGTH_MIN,
-  PURCHASE_PRICE_PER_UNIT,
-  RATE_LIMIT_MS,
-  SINGLE_ACTION_STAMINA_COST_MAX,
-  SINGLE_ACTION_STAMINA_COST_MIN,
-} from './constants';
 import { createInsufficientStaminaMessage } from './messages';
 import {
   deleteProfileIn,
@@ -25,11 +13,21 @@ import {
 } from './repository';
 import {
   assertDuelState,
+  CUT_PRICE,
+  DUEL_ACTION_STAMINA_COST_MAX,
+  DUEL_ACTION_STAMINA_COST_MIN,
+  DUEL_REQUIRED_STAMINA,
   duelOutcomes,
   ensureRegistered,
+  INITIAL_LENGTH_MAX,
+  INITIAL_LENGTH_MIN,
   masturbateOutcomes,
   normalizePurchaseAmount,
+  PURCHASE_PRICE_PER_UNIT,
+  RATE_LIMIT_MS,
   rollLengthAction,
+  SINGLE_ACTION_STAMINA_COST_MAX,
+  SINGLE_ACTION_STAMINA_COST_MIN,
   tuckOutcomes,
 } from './rules';
 import type {

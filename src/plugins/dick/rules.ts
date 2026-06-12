@@ -1,7 +1,6 @@
 import type { RandomService } from '@fraqjs/plugin-random';
 
 import { pickRange } from '../../util/rules';
-import { PURCHASE_PRICE_PER_UNIT } from './constants';
 import type {
   DickProfile,
   DuelMode,
@@ -9,6 +8,17 @@ import type {
   LengthActionRule,
   RolledLengthAction,
 } from './types';
+
+export const CUT_PRICE = 2_000_000;
+export const PURCHASE_PRICE_PER_UNIT = 3_000;
+export const INITIAL_LENGTH_MIN = 30;
+export const INITIAL_LENGTH_MAX = 1600;
+export const SINGLE_ACTION_STAMINA_COST_MIN = 10;
+export const SINGLE_ACTION_STAMINA_COST_MAX = 20;
+export const DUEL_REQUIRED_STAMINA = 100;
+export const DUEL_ACTION_STAMINA_COST_MIN = 10;
+export const DUEL_ACTION_STAMINA_COST_MAX = 20;
+export const RATE_LIMIT_MS = 30_000;
 
 export function formatLength(length: number): string {
   const absolute = Math.trunc(Math.abs(length));

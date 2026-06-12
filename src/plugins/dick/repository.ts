@@ -1,6 +1,8 @@
 import type { QueryRunner } from '../../util/kysely';
-import { DICK_PROFILE_TABLE, RANKING_LIMIT } from './constants';
 import type { DickProfile, DickProfileRow, DickRanking } from './types';
+
+export const DICK_PROFILE_TABLE = 'dick_profiles' as const;
+export const RANKING_LIMIT = 5;
 
 export function nowIso(): string {
   return new Date().toISOString();

@@ -119,7 +119,6 @@ ${error instanceof Error ? error.message : '轰炸失败'}
   },
 });
 
-export * from './constants';
 export * from './messages';
 export * from './rules';
 export { BombService } from './service';

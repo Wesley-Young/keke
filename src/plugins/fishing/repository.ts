@@ -1,11 +1,7 @@
 import type { QueryRunner } from '../../util/kysely';
 import {
-  FISHING_INVENTORY_TABLE,
-  FISHING_THIEF_WARNING_TABLE,
-  fishingInventoryKinds,
-} from './constants';
-import {
   createEmptyInventory,
+  fishingInventoryKinds,
   normalizeInventoryPatch,
   toInventory,
 } from './rules';
@@ -15,6 +11,9 @@ import type {
   FishingInventoryRow,
   FishingThiefWarningRow,
 } from './types';
+
+export const FISHING_INVENTORY_TABLE = 'fishing_inventory' as const;
+export const FISHING_THIEF_WARNING_TABLE = 'fishing_thief_warning' as const;
 
 export async function ensureInventoryRow(
   db: QueryRunner,

@@ -1,6 +1,6 @@
 import type { KindedWeightedRule, Range } from '../../util/rules';
 import type { CurrencyBalance, CurrencyPatch } from '../currency';
-import type { fishingInventoryKinds, fishingItemKinds } from './constants';
+import type { fishingInventoryKinds, fishingItemKinds } from './rules';
 
 export type FishingItemKind = (typeof fishingItemKinds)[number];
 export type FishingInventoryKind = (typeof fishingInventoryKinds)[number];

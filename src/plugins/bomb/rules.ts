@@ -2,8 +2,14 @@ import type { RandomService } from '@fraqjs/plugin-random';
 
 import { capLoss, pickRange } from '../../util/rules';
 import type { CurrencyBalance } from '../currency';
-import { MAX_STEAL_RATIO } from './constants';
 import type { BombBackfireRoll, BombSuccessRoll, BombTier } from './types';
+
+export const BOMB_PRICE = 50_000;
+export const MIN_TARGET_SHELL = 50_000;
+export const MAX_STEAL_RATIO = 0.2;
+export const ACTOR_COOLDOWN_MS = 60 * 1000;
+export const MIN_ACTOR_STAMINA = 50;
+export const MIN_ACTOR_CHARM = 50;
 
 export const poorTier: BombTier = {
   kind: 'poor',

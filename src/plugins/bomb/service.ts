@@ -13,8 +13,10 @@ import {
   MIN_ACTOR_CHARM,
   MIN_ACTOR_STAMINA,
   MIN_TARGET_SHELL,
-} from './constants';
-import { pickTier, rollBombBackfire, rollBombSuccess } from './rules';
+  pickTier,
+  rollBombBackfire,
+  rollBombSuccess,
+} from './rules';
 import type { BombOutcomeKind, BombResult, BombTier } from './types';
 import { BombRateLimitError } from './types';
 
