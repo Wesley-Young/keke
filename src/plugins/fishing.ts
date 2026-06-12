@@ -17,6 +17,7 @@ import {
 } from './currency';
 
 const FISHING_INVENTORY_TABLE = 'fishing_inventory' as const;
+const FISHING_THIEF_WARNING_TABLE = 'fishing_thief_warning' as const;
 
 const ROD_PRICE = 50_000;
 const BAIT_PRICE = 10_000;
@@ -35,6 +36,15 @@ const SPECIAL_SELL_EVENT_NORMAL_WEIGHT = 7;
 const SPECIAL_SELL_EVENT_MIN_MULTIPLIER = 10;
 const SPECIAL_SELL_EVENT_MAX_MULTIPLIER = 15;
 const YARN_REWARD = 19_900;
+const THIEF_WARNING_WEIGHT = 80;
+const THIEF_CLEAR_WARNING_WEIGHT = 60;
+const THIEF_STEAL_PROBABILITY = 0.3;
+const THIEF_STEAL_MIN_PERCENT = 8;
+const THIEF_STEAL_MAX_PERCENT = 15;
+const THIEF_STEAL_MIN_WEIGHT = 10;
+const THIEF_STEAL_MAX_WEIGHT = 80;
+const THIEF_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const thiefStealableItemKinds = ['diamondRing', 'crown'] as const;
 
 const fishingItemKinds = [
   'shoe',
@@ -62,9 +72,21 @@ export interface FishingInventoryRow extends FishingInventory {
   user_id: number;
 }
 
+export interface FishingThiefWarningRow {
+  user_id: number;
+  warned: number;
+  warned_at: number | null;
+  warned_weight: number;
+  last_weight: number;
+  last_stolen_at: number | null;
+  stolen_count: number;
+  stolen_weight: number;
+}
+
 declare module '@fraqjs/plugin-kysely' {
   interface FraqDatabase {
     fishing_inventory: FishingInventoryRow;
+    fishing_thief_warning: FishingThiefWarningRow;
   }
 }
 
@@ -83,6 +105,24 @@ interface CatchResult {
 interface SellShellResult {
   shellReward: number;
   message?: string;
+}
+
+type FishingThiefEvent =
+  | {
+      outcome: 'warning';
+      inventoryWeight: number;
+    }
+  | {
+      outcome: 'stolen';
+      inventoryWeight: number;
+      stolenItems: FishingInventory;
+      stolenCount: number;
+      stolenWeight: number;
+    };
+
+interface ApplyCatchInventoryResult {
+  inventory: FishingInventory;
+  thiefEvent?: FishingThiefEvent;
 }
 
 interface SellFishRequest {
@@ -346,6 +386,19 @@ const sellCharmRules: Record<FishingItemKind, SellCharmRule> = {
   },
 };
 
+const fishingItemWeights: Record<FishingItemKind, number> = {
+  shoe: 1,
+  underwear: 1,
+  seashell: 2,
+  frog: 2,
+  yellowFish: 2,
+  octopus: 3,
+  whale: 4,
+  electricEel: 4,
+  diamondRing: 6,
+  crown: 10,
+};
+
 const fishingItemByKind = new Map(
   fishingItems.map((item) => [item.kind, item]),
 );
@@ -471,6 +524,157 @@ async function adjustInventoryIn(
   return next;
 }
 
+async function getThiefWarningIn(
+  db: QueryRunner,
+  userId: number,
+): Promise<FishingThiefWarningRow | undefined> {
+  return db
+    .selectFrom(FISHING_THIEF_WARNING_TABLE)
+    .selectAll()
+    .where('user_id', '=', userId)
+    .executeTakeFirst();
+}
+
+async function setThiefWarnedIn(
+  db: QueryRunner,
+  userId: number,
+  inventoryWeight: number,
+  now: number,
+): Promise<void> {
+  await db
+    .insertInto(FISHING_THIEF_WARNING_TABLE)
+    .values({
+      user_id: userId,
+      warned: 1,
+      warned_at: now,
+      warned_weight: inventoryWeight,
+      last_weight: inventoryWeight,
+      last_stolen_at: null,
+      stolen_count: 0,
+      stolen_weight: 0,
+    })
+    .onConflict((oc) =>
+      oc.column('user_id').doUpdateSet({
+        warned: 1,
+        warned_at: now,
+        warned_weight: inventoryWeight,
+        last_weight: inventoryWeight,
+      }),
+    )
+    .execute();
+}
+
+async function clearThiefWarningIn(
+  db: QueryRunner,
+  userId: number,
+  inventoryWeight: number,
+): Promise<void> {
+  const state = await getThiefWarningIn(db, userId);
+  if (!state) {
+    return;
+  }
+
+  await db
+    .updateTable(FISHING_THIEF_WARNING_TABLE)
+    .set({
+      warned: 0,
+      warned_at: null,
+      warned_weight: 0,
+      last_weight: inventoryWeight,
+    })
+    .where('user_id', '=', userId)
+    .execute();
+}
+
+async function updateThiefWeightIn(
+  db: QueryRunner,
+  userId: number,
+  inventoryWeight: number,
+): Promise<void> {
+  await db
+    .updateTable(FISHING_THIEF_WARNING_TABLE)
+    .set({
+      last_weight: inventoryWeight,
+    })
+    .where('user_id', '=', userId)
+    .execute();
+}
+
+async function updateThiefStolenIn(
+  db: QueryRunner,
+  userId: number,
+  inventoryWeight: number,
+  stolenCount: number,
+  stolenWeight: number,
+  now: number,
+): Promise<void> {
+  const state = await getThiefWarningIn(db, userId);
+  await db
+    .updateTable(FISHING_THIEF_WARNING_TABLE)
+    .set({
+      last_weight: inventoryWeight,
+      last_stolen_at: now,
+      stolen_count: (state?.stolen_count ?? 0) + stolenCount,
+      stolen_weight: (state?.stolen_weight ?? 0) + stolenWeight,
+    })
+    .where('user_id', '=', userId)
+    .execute();
+}
+
+function createThiefPool(inventory: FishingInventory): FishingItemKind[] {
+  const pool: FishingItemKind[] = [];
+
+  for (const kind of thiefStealableItemKinds) {
+    for (let index = 0; index < inventory[kind]; index++) {
+      pool.push(kind);
+    }
+  }
+
+  return pool;
+}
+
+function createStolenInventory(
+  inventory: FishingInventory,
+  targetWeight: number,
+  random: RandomService,
+): FishingInventory {
+  const stolenInventory = createEmptyInventory();
+  const remainingInventory = { ...inventory };
+  let remainingWeight = calculateInventoryWeight(remainingInventory);
+
+  while (
+    remainingWeight > 0 &&
+    calculateInventoryWeight(stolenInventory) < targetWeight
+  ) {
+    const pool = createThiefPool(remainingInventory);
+    if (pool.length < 1) {
+      break;
+    }
+
+    const kind = random.pick(pool);
+    remainingInventory[kind] -= 1;
+    stolenInventory[kind] += 1;
+    remainingWeight -= fishingItemWeights[kind];
+  }
+
+  return stolenInventory;
+}
+
+function createThiefInventoryPatch(
+  stolenInventory: FishingInventory,
+): FishingInventoryPatch {
+  const patch: FishingInventoryPatch = {};
+
+  for (const item of fishingItems) {
+    const count = stolenInventory[item.kind];
+    if (count > 0) {
+      patch[item.kind] = -count;
+    }
+  }
+
+  return patch;
+}
+
 function addItemResult(kind: FishingItemKind, count = 1): CatchResult {
   const item = fishingItemByKind.get(kind);
   if (!item) {
@@ -530,6 +734,33 @@ function formatSellCurrencyChanges(
 
 function hasAnyFishingItem(inventory: FishingInventory): boolean {
   return fishingItems.some((item) => inventory[item.kind] > 0);
+}
+
+function hasFishingItemGain(patch: FishingInventoryPatch): boolean {
+  return fishingItems.some((item) => (patch[item.kind] ?? 0) > 0);
+}
+
+function calculateInventoryWeight(inventory: FishingInventory): number {
+  return fishingItems.reduce((total, item) => {
+    return total + inventory[item.kind] * fishingItemWeights[item.kind];
+  }, 0);
+}
+
+function calculateInventoryCount(inventory: FishingInventory): number {
+  return fishingItems.reduce((total, item) => total + inventory[item.kind], 0);
+}
+
+function formatThiefEvent(event?: FishingThiefEvent): string {
+  if (!event) {
+    return '';
+  }
+
+  if (event.outcome === 'warning') {
+    return `你的鱼库已经堆得很显眼了，似乎有人盯上了。\n继续囤鱼可能引来盗贼，卖鱼可以解除风险。`;
+  }
+
+  const stolenText = formatInventory(event.stolenItems);
+  return `盗贼趁你继续囤货时下手了，偷走了：${stolenText}。\n及时卖鱼可以降低被偷风险。`;
 }
 
 function parseSellFishText(text: string): SellFishTextParseResult {
@@ -744,6 +975,25 @@ export class FishingService {
     });
   }
 
+  async applyCatchInventory(
+    userId: number,
+    inventoryPatch: FishingInventoryPatch,
+  ): Promise<ApplyCatchInventoryResult> {
+    assertUserId(userId);
+
+    return this.db.kysely.transaction().execute(async (trx) => {
+      const inventory = await adjustInventoryIn(trx, userId, inventoryPatch);
+      const thiefEvent = hasFishingItemGain(inventoryPatch)
+        ? await this.applyThiefEventIn(trx, userId, inventory)
+        : undefined;
+
+      return {
+        inventory,
+        thiefEvent,
+      };
+    });
+  }
+
   async sellFish(userId: number, item: FishingItemMeta) {
     assertUserId(userId);
 
@@ -770,6 +1020,7 @@ export class FishingService {
           charm: charmReward,
         },
       );
+      await this.clearThiefWarningIfSafeIn(trx, userId, nextInventory);
 
       return {
         inventory: nextInventory,
@@ -834,6 +1085,7 @@ export class FishingService {
           charm: charmReward,
         },
       );
+      await this.clearThiefWarningIfSafeIn(trx, userId, nextInventory);
 
       return {
         inventory: nextInventory,
@@ -900,6 +1152,7 @@ export class FishingService {
           charm: charmReward,
         },
       );
+      await this.clearThiefWarningIfSafeIn(trx, userId, nextInventory);
 
       return {
         inventory: nextInventory,
@@ -1015,6 +1268,102 @@ export class FishingService {
 
     return pickRange(this.random, rule.charm);
   }
+
+  private async clearThiefWarningIfSafeIn(
+    db: QueryRunner,
+    userId: number,
+    inventory: FishingInventory,
+  ): Promise<void> {
+    const inventoryWeight = calculateInventoryWeight(inventory);
+    if (inventoryWeight <= THIEF_CLEAR_WARNING_WEIGHT) {
+      await clearThiefWarningIn(db, userId, inventoryWeight);
+    }
+  }
+
+  private async applyThiefEventIn(
+    db: QueryRunner,
+    userId: number,
+    inventory: FishingInventory,
+  ): Promise<FishingThiefEvent | undefined> {
+    const inventoryWeight = calculateInventoryWeight(inventory);
+    const now = Date.now();
+
+    if (inventoryWeight <= THIEF_CLEAR_WARNING_WEIGHT) {
+      await clearThiefWarningIn(db, userId, inventoryWeight);
+      return undefined;
+    }
+
+    if (inventoryWeight <= THIEF_WARNING_WEIGHT) {
+      return undefined;
+    }
+
+    const state = await getThiefWarningIn(db, userId);
+    if (!state?.warned) {
+      await setThiefWarnedIn(db, userId, inventoryWeight, now);
+      return {
+        outcome: 'warning',
+        inventoryWeight,
+      };
+    }
+
+    if (
+      state.last_stolen_at !== null &&
+      now - state.last_stolen_at < THIEF_COOLDOWN_MS
+    ) {
+      await updateThiefWeightIn(db, userId, inventoryWeight);
+      return undefined;
+    }
+
+    if (!this.random.bool(THIEF_STEAL_PROBABILITY)) {
+      await updateThiefWeightIn(db, userId, inventoryWeight);
+      return undefined;
+    }
+
+    const targetWeight = Math.min(
+      THIEF_STEAL_MAX_WEIGHT,
+      Math.max(
+        THIEF_STEAL_MIN_WEIGHT,
+        Math.floor(
+          (inventoryWeight *
+            this.random.range(
+              THIEF_STEAL_MIN_PERCENT,
+              THIEF_STEAL_MAX_PERCENT,
+            )) /
+            100,
+        ),
+      ),
+    );
+    const stolenItems = createStolenInventory(
+      inventory,
+      targetWeight,
+      this.random,
+    );
+    const stolenWeight = calculateInventoryWeight(stolenItems);
+    const stolenCount = calculateInventoryCount(stolenItems);
+
+    if (stolenCount < 1) {
+      await updateThiefWeightIn(db, userId, inventoryWeight);
+      return undefined;
+    }
+
+    await adjustInventoryIn(db, userId, createThiefInventoryPatch(stolenItems));
+    await updateThiefStolenIn(
+      db,
+      userId,
+      Math.max(0, inventoryWeight - stolenWeight),
+      stolenCount,
+      stolenWeight,
+      now,
+    );
+
+    return {
+      outcome: 'stolen',
+      inventoryWeight,
+      stolenItems,
+      stolenCount,
+      stolenWeight,
+    };
+  }
 }
 
 export const FishingPlugin = definePlugin({
@@ -1085,6 +1434,33 @@ ${error instanceof Error ? error.message : fallback}
                 column.notNull().defaultTo(0),
               )
               .addPrimaryKeyConstraint('fishing_inventory_pk', ['user_id'])
+              .execute();
+          },
+        },
+        '002_init_fishing_thief_warning_table': {
+          async up(db) {
+            await db.schema
+              .createTable(FISHING_THIEF_WARNING_TABLE)
+              .ifNotExists()
+              .addColumn('user_id', 'integer', (column) => column.notNull())
+              .addColumn('warned', 'integer', (column) =>
+                column.notNull().defaultTo(0),
+              )
+              .addColumn('warned_at', 'integer')
+              .addColumn('warned_weight', 'integer', (column) =>
+                column.notNull().defaultTo(0),
+              )
+              .addColumn('last_weight', 'integer', (column) =>
+                column.notNull().defaultTo(0),
+              )
+              .addColumn('last_stolen_at', 'integer')
+              .addColumn('stolen_count', 'integer', (column) =>
+                column.notNull().defaultTo(0),
+              )
+              .addColumn('stolen_weight', 'integer', (column) =>
+                column.notNull().defaultTo(0),
+              )
+              .addPrimaryKeyConstraint('fishing_thief_warning_pk', ['user_id'])
               .execute();
           },
         },
@@ -1173,13 +1549,17 @@ ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
       `);
 
         if (result.catchResult.inventoryPatch) {
-          await ctx.db.kysely.transaction().execute(async (trx) => {
-            await adjustInventoryIn(
-              trx,
-              message.sender_id,
-              result.catchResult.inventoryPatch ?? {},
-            );
-          });
+          const inventoryResult = await fishing.applyCatchInventory(
+            message.sender_id,
+            result.catchResult.inventoryPatch,
+          );
+          const thiefText = formatThiefEvent(inventoryResult.thiefEvent);
+          if (thiefText) {
+            await session.reply(msg`
+${seg.mention(message.sender_id)}
+${thiefText}
+            `);
+          }
         }
       } catch (error) {
         await replyError(session, error, '钓鱼失败');
@@ -1229,8 +1609,7 @@ ${formatSellCurrencyChanges(
             await session.reply(msg`
 ${seg.mention(message.sender_id)}
 ${parseResult.reason}
-可以发送【查看鱼塘】看看能卖什么
-          `);
+            `);
             return;
           }
 
