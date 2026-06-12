@@ -204,7 +204,7 @@ export default function DickUsageCard() {
             </div>
             <div style={{ fontSize: 17, lineHeight: 1.5 }}>
               打搅、扣、对决相关命令的冷却时间为
-              <span style={{ fontWeight: 800 }}>1分钟</span>。
+              <span style={{ fontWeight: 800 }}>30秒</span>。
             </div>
           </div>
 
