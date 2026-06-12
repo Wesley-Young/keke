@@ -19,7 +19,7 @@ import {
 import { NickService } from './nick';
 
 const DICK_PROFILE_TABLE = 'dick_profiles' as const;
-const CUT_PRICE = 100_000;
+const CUT_PRICE = 2_000_000;
 const PURCHASE_PRICE_PER_UNIT = 3_000;
 const INITIAL_LENGTH_MIN = 30;
 const INITIAL_LENGTH_MAX = 1600;

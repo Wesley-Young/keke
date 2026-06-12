@@ -228,7 +228,7 @@ export default function DickUsageCard() {
             </div>
             <div style={{ fontSize: 17, lineHeight: 1.5 }}>
               发送【<span style={{ fontWeight: 800 }}>割牛牛</span>】花费
-              <span style={{ fontWeight: 800 }}>10W微壳</span>重开一次。
+              <span style={{ fontWeight: 800 }}>200W微壳</span>重开一次。
             </div>
           </div>
         </div>
