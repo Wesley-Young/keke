@@ -12,10 +12,13 @@ import { RandomService } from '@fraqjs/plugin-random';
 import type { QueryRunner } from '../util/kysely';
 import {
   assertUserId,
+  formatDurationMs,
+  formatDurationSeconds,
   type KindedWeightedRule,
   pickRange,
   type Range,
 } from '../util/rules';
+import { ConfigProviderService } from './config-provider';
 import {
   type CurrencyBalance,
   type CurrencyPatch,
@@ -38,6 +41,10 @@ const HIGH_CHARM_WAIT_MIN_MS = 10_000;
 const HIGH_CHARM_WAIT_MAX_MS = 20_000;
 const LOW_CHARM_WAIT_MIN_MS = 15_000;
 const LOW_CHARM_WAIT_MAX_MS = 30_000;
+const FISHING_BOMB_COOLDOWN_MS = 10 * 60 * 1000;
+const FISHING_BOMB_STAMINA_COST = 50;
+const FISHING_BOMB_CHARM_COST = 50;
+const FISHING_BOMB_MUTE_SECONDS = { min: 3 * 60, max: 5 * 60 } as const;
 const SPECIAL_SELL_EVENT_CHANCE_WEIGHT = 3;
 const SPECIAL_SELL_EVENT_NORMAL_WEIGHT = 7;
 const SPECIAL_SELL_EVENT_MIN_MULTIPLIER = 10;
@@ -200,6 +207,14 @@ interface FishingWaitRecord {
 }
 
 type FishingWaitStartedHandler = () => Promise<void> | void;
+
+interface FishingBombResult {
+  balance: CurrencyBalance;
+  interruptedCount: number;
+  muteSeconds: number;
+  staminaCost: number;
+  charmCost: number;
+}
 
 type SellShellRule =
   | {
@@ -914,8 +929,16 @@ class AlreadyFishingError extends Error {
   }
 }
 
+class FishingBombRateLimitError extends Error {
+  constructor(readonly remainingMs: number) {
+    super('Fishing bomb rate limited');
+    this.name = 'FishingBombRateLimitError';
+  }
+}
+
 export class FishingService implements Disposable {
   private readonly fishingWaits = new Map<number, FishingWaitRecord>();
+  private readonly lastFishingBombAtByUserId = new Map<number, number>();
   private disposing = false;
 
   constructor(
@@ -1009,6 +1032,52 @@ export class FishingService implements Disposable {
     }
 
     return waits.length;
+  }
+
+  async bombFish(userId: number): Promise<FishingBombResult> {
+    assertUserId(userId);
+    this.assertFishingBombCooldown(userId);
+
+    if (this.fishingWaits.size < 1) {
+      throw new Error('现在没有人在钓鱼');
+    }
+
+    const muteSeconds = pickRange(this.random, FISHING_BOMB_MUTE_SECONDS);
+    const balance = await this.db.kysely.transaction().execute(async (trx) => {
+      const current = await this.currency.getIn(trx, userId);
+      if (current.bomb < 1) {
+        throw new Error('炸弹不足\n发送【购买炸弹 数量】购买炸弹');
+      }
+
+      if (current.stamina < FISHING_BOMB_STAMINA_COST) {
+        throw new Error(
+          `体力不足，炸鱼需要${FISHING_BOMB_STAMINA_COST}体力\n当前体力：${current.stamina}`,
+        );
+      }
+
+      if (current.charm < FISHING_BOMB_CHARM_COST) {
+        throw new Error(
+          `魅力不足，炸鱼需要${FISHING_BOMB_CHARM_COST}魅力\n当前魅力：${current.charm}`,
+        );
+      }
+
+      return this.currency.spendIn(trx, userId, {
+        bomb: 1,
+        stamina: FISHING_BOMB_STAMINA_COST,
+        charm: FISHING_BOMB_CHARM_COST,
+      });
+    });
+
+    this.consumeFishingBombCooldown(userId);
+    const interruptedCount = this.forfeitAllWaitingFish();
+
+    return {
+      balance,
+      interruptedCount,
+      muteSeconds,
+      staminaCost: FISHING_BOMB_STAMINA_COST,
+      charmCost: FISHING_BOMB_CHARM_COST,
+    };
   }
 
   private async fishWithWait(
@@ -1171,6 +1240,22 @@ export class FishingService implements Disposable {
     } catch (error) {
       void error;
     }
+  }
+
+  private assertFishingBombCooldown(userId: number): void {
+    const lastFishingBombAt = this.lastFishingBombAtByUserId.get(userId);
+    if (lastFishingBombAt === undefined) {
+      return;
+    }
+
+    const elapsedMs = Date.now() - lastFishingBombAt;
+    if (elapsedMs < FISHING_BOMB_COOLDOWN_MS) {
+      throw new FishingBombRateLimitError(FISHING_BOMB_COOLDOWN_MS - elapsedMs);
+    }
+  }
+
+  private consumeFishingBombCooldown(userId: number): void {
+    this.lastFishingBombAtByUserId.set(userId, Date.now());
   }
 
   async applyCatchInventory(
@@ -1568,12 +1653,14 @@ export const FishingPlugin = definePlugin({
   name: 'fishing',
   provides: [FishingService],
   inject: {
+    config: ConfigProviderService,
     db: DatabaseService,
     currency: CurrencyService,
     random: RandomService,
   },
   apply(ctx) {
     const fishing = new FishingService(ctx.db, ctx.currency, ctx.random);
+    const config = ctx.config.get();
     const replyError = async (
       session: Session,
       error: unknown,
@@ -1744,6 +1831,46 @@ ${thiefText}
         }
 
         await replyError(session, error, '钓鱼失败');
+      }
+    });
+
+    ctx.router.command('炸鱼').execute(async (session) => {
+      const message = session.raw;
+
+      if (
+        message.message_scene !== 'group' ||
+        !config.officialGroups.includes(message.peer_id)
+      ) {
+        return;
+      }
+
+      try {
+        const result = await fishing.bombFish(message.sender_id);
+
+        await ctx.client.set_group_member_mute({
+          group_id: message.peer_id,
+          user_id: message.sender_id,
+          duration: result.muteSeconds,
+        });
+
+        await session.reply(msg`
+${seg.mention(message.sender_id)}
+炸鱼成功，强制让${result.interruptedCount}个人收竿
+禁言结果：${formatDurationSeconds(result.muteSeconds)}
+${formatCurrencyChange('炸弹', result.balance.bomb, -1)}
+${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
+${formatCurrencyChange('魅力', result.balance.charm, -result.charmCost)}
+        `);
+      } catch (error) {
+        if (error instanceof FishingBombRateLimitError) {
+          await session.reply(msg`
+${seg.mention(message.sender_id)}
+炸鱼冷却中，剩余${formatDurationMs(error.remainingMs)}
+          `);
+          return;
+        }
+
+        await replyError(session, error, '炸鱼失败');
       }
     });
 
