@@ -97,6 +97,7 @@ export type FishingFishResult =
       shellDelta: number;
       balance: CurrencyBalance;
       inventory: FishingInventory;
+      bombedByUserId?: number;
     }
   | {
       outcome: 'yarn';
@@ -105,6 +106,7 @@ export type FishingFishResult =
       shellDelta: number;
       balance: CurrencyBalance;
       inventory: FishingInventory;
+      bombedByUserId?: number;
     }
   | {
       outcome: 'catch';
@@ -116,6 +118,7 @@ export type FishingFishResult =
       inventory: FishingInventory;
       thiefEvent?: FishingThiefEvent;
       bombLootInventory?: FishingInventory;
+      bombedByUserId?: number;
     }
   | {
       outcome: 'interrupted';
@@ -124,6 +127,7 @@ export type FishingFishResult =
       shellDelta: number;
       balance: CurrencyBalance;
       inventory: FishingInventory;
+      bombedByUserId?: number;
     };
 
 export type FishingWaitResolution = 'settle' | 'forfeit';

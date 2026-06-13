@@ -356,6 +356,8 @@ export class FishingService implements Disposable {
     result: FishingFishResult,
     resolution: FishingWaitResolution,
   ): Promise<FishingFishResult> {
+    const bombedByUserId = waitRecord.bombLootUserId;
+
     if (resolution === 'forfeit') {
       return {
         outcome: 'interrupted',
@@ -364,6 +366,7 @@ export class FishingService implements Disposable {
         shellDelta: result.shellDelta,
         balance: result.balance,
         inventory: result.inventory,
+        bombedByUserId,
       };
     }
 
@@ -376,11 +379,15 @@ export class FishingService implements Disposable {
         ...result,
         shellDelta: result.shellDelta + shellDelta(result.balance, nextBalance),
         balance: nextBalance,
+        bombedByUserId,
       };
     }
 
     if (result.outcome !== 'catch') {
-      return result;
+      return {
+        ...result,
+        bombedByUserId,
+      };
     }
 
     let nextBalance = result.balance;
@@ -398,6 +405,7 @@ export class FishingService implements Disposable {
         ...result,
         shellDelta: result.shellDelta + shellDelta(result.balance, nextBalance),
         balance: nextBalance,
+        bombedByUserId,
       };
     }
 
@@ -414,6 +422,7 @@ export class FishingService implements Disposable {
       inventory: inventoryResult.inventory,
       thiefEvent: inventoryResult.thiefEvent,
       bombLootInventory: inventoryResult.bombLootInventory,
+      bombedByUserId,
     };
   }
 

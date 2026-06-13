@@ -6,6 +6,7 @@ import FishingPlugin, {
   calculateInventoryCount,
   calculateInventoryWeight,
   createEmptyInventory,
+  type FishingFishResult,
   FishingService,
   formatFishPond,
   formatInventory,
@@ -239,6 +240,53 @@ describe('FishingPlugin', () => {
       const secondResult = await second;
       assert.notEqual(firstResult.outcome, 'interrupted');
       assert.notEqual(secondResult.outcome, 'interrupted');
+    } finally {
+      await ctx.stop();
+    }
+  });
+
+  test('reports bombed fishing result instead of original catch text', async () => {
+    const { client, ctx } = await startTestContext((ctx) =>
+      ctx.install(FishingPlugin),
+    );
+
+    try {
+      const fishing = ctx.resolve(FishingService);
+      const inventory = createEmptyInventory();
+      inventory.rod = 1;
+      const bombLootInventory = createEmptyInventory();
+      bombLootInventory.frog = 1;
+
+      fishing.fish = async () =>
+        ({
+          outcome: 'catch',
+          staminaCost: 5,
+          charm: 0,
+          catchResult: {
+            text: '钓到🐸青蛙',
+            inventoryPatch: {
+              frog: 1,
+            },
+          },
+          shellDelta: -10_000,
+          balance: {
+            shell: 90_000,
+            stamina: 95,
+            charm: 0,
+            bomb: 0,
+          },
+          inventory,
+          bombLootInventory,
+          bombedByUserId: 10002,
+        }) satisfies FishingFishResult;
+
+      await client.receiveGroup({ groupId: 20001, userId: 10001 }, inmsg`钓鱼`);
+      await flush();
+
+      const text = lastText(client);
+      assert.match(text, /有人炸鱼/);
+      assert.match(text, /被迫提前收竿/);
+      assert.doesNotMatch(text, /钓到🐸青蛙/);
     } finally {
       await ctx.stop();
     }

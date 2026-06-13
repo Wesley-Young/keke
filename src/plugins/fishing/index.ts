@@ -151,6 +151,16 @@ ${formatCurrencyChange('微壳', result.balance.shell, -ROD_PRICE)}
           });
         });
 
+        if (result.bombedByUserId !== undefined) {
+          await session.reply(msg`
+${seg.mention(message.sender_id)}
+有人炸鱼，你被迫提前收竿了
+${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
+${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
+        `);
+          return;
+        }
+
         if (result.outcome === 'empty') {
           await session.reply(msg`
 ${seg.mention(message.sender_id)}
@@ -174,7 +184,7 @@ ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
         if (result.outcome === 'interrupted') {
           await session.reply(msg`
 ${seg.mention(message.sender_id)}
-有人炸鱼，你什么都没钓到就被迫收竿了
+有人炸鱼，你被迫提前收竿了
 ${formatCurrencyChange('微壳', result.balance.shell, result.shellDelta)}
 ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
         `);
