@@ -216,14 +216,55 @@ export class FishingService implements Disposable {
     });
 
     this.consumeFishingBombCooldown(userId);
-    const interruptedCount = this.forfeitAllWaitingFish();
+    const waits = [...this.fishingWaits.values()];
+    for (const wait of waits) {
+      wait.bombLootUserId = userId;
+      wait.finish('settle');
+    }
+
+    const settled = await Promise.allSettled(
+      waits.flatMap((wait) => (wait.operation ? [wait.operation] : [])),
+    );
+    const results = settled.flatMap((item) =>
+      item.status === 'fulfilled' ? [item.value as FishingFishResult] : [],
+    );
+    const loot = this.summarizeBombLoot(results);
 
     return {
       balance,
-      interruptedCount,
+      settledCount: waits.length,
+      stolenUserCount: loot.stolenUserCount,
+      stolenCount: loot.stolenCount,
+      stolenInventory: loot.stolenInventory,
       muteSeconds,
       staminaCost: FISHING_BOMB_STAMINA_COST,
       charmCost: FISHING_BOMB_CHARM_COST,
+    };
+  }
+
+  private summarizeBombLoot(settled: readonly FishingFishResult[]): {
+    stolenUserCount: number;
+    stolenCount: number;
+    stolenInventory: FishingInventory;
+  } {
+    const stolenInventory = createEmptyInventory();
+    let stolenUserCount = 0;
+
+    for (const result of settled) {
+      if (result.outcome !== 'catch' || !result.bombLootInventory) {
+        continue;
+      }
+
+      stolenUserCount += 1;
+      for (const item of fishingItems) {
+        stolenInventory[item.kind] += result.bombLootInventory[item.kind] ?? 0;
+      }
+    }
+
+    return {
+      stolenUserCount,
+      stolenCount: calculateInventoryCount(stolenInventory),
+      stolenInventory,
     };
   }
 
@@ -237,7 +278,7 @@ export class FishingService implements Disposable {
     waitRecord.start(this.pickWaitMs(result.charm));
     const resolution = await waitRecord.wait;
 
-    return this.settleFishResult(userId, result, resolution);
+    return this.settleFishResult(userId, waitRecord, result, resolution);
   }
 
   private async castLine(userId: number): Promise<FishingFishResult> {
@@ -311,6 +352,7 @@ export class FishingService implements Disposable {
 
   private async settleFishResult(
     userId: number,
+    waitRecord: FishingWaitRecord,
     result: FishingFishResult,
     resolution: FishingWaitResolution,
   ): Promise<FishingFishResult> {
@@ -362,6 +404,7 @@ export class FishingService implements Disposable {
     const inventoryResult = await this.applyCatchInventory(
       userId,
       result.catchResult.inventoryPatch,
+      waitRecord.bombLootUserId,
     );
 
     return {
@@ -370,6 +413,7 @@ export class FishingService implements Disposable {
       balance: nextBalance,
       inventory: inventoryResult.inventory,
       thiefEvent: inventoryResult.thiefEvent,
+      bombLootInventory: inventoryResult.bombLootInventory,
     };
   }
 
@@ -408,11 +452,28 @@ export class FishingService implements Disposable {
   async applyCatchInventory(
     userId: number,
     inventoryPatch: FishingInventoryPatch,
+    bombLootUserId?: number,
   ): Promise<ApplyCatchInventoryResult> {
     assertUserId(userId);
 
     return this.db.kysely.transaction().execute(async (trx) => {
-      const inventory = await adjustInventoryIn(trx, userId, inventoryPatch);
+      let inventory = await adjustInventoryIn(trx, userId, inventoryPatch);
+      let bombLootInventory: FishingInventory | undefined;
+
+      if (bombLootUserId !== undefined) {
+        const bombLootPatch = this.extractFishingItemPatch(inventoryPatch);
+
+        if (this.hasAnyFishingItemPatch(bombLootPatch)) {
+          inventory = await adjustInventoryIn(
+            trx,
+            userId,
+            this.negateFishingItemPatch(bombLootPatch),
+          );
+          await adjustInventoryIn(trx, bombLootUserId, bombLootPatch);
+          bombLootInventory = this.toFishingItemInventory(bombLootPatch);
+        }
+      }
+
       const thiefEvent = hasFishingItemGain(inventoryPatch)
         ? await this.applyThiefEventIn(trx, userId, inventory)
         : undefined;
@@ -420,8 +481,55 @@ export class FishingService implements Disposable {
       return {
         inventory,
         thiefEvent,
+        bombLootInventory,
       };
     });
+  }
+
+  private extractFishingItemPatch(
+    patch: FishingInventoryPatch,
+  ): FishingInventoryPatch {
+    const result: FishingInventoryPatch = {};
+
+    for (const item of fishingItems) {
+      const count = patch[item.kind] ?? 0;
+      if (count > 0) {
+        result[item.kind] = count;
+      }
+    }
+
+    return result;
+  }
+
+  private hasAnyFishingItemPatch(patch: FishingInventoryPatch): boolean {
+    return fishingItems.some((item) => (patch[item.kind] ?? 0) > 0);
+  }
+
+  private negateFishingItemPatch(
+    patch: FishingInventoryPatch,
+  ): FishingInventoryPatch {
+    const result: FishingInventoryPatch = {};
+
+    for (const item of fishingItems) {
+      const count = patch[item.kind] ?? 0;
+      if (count > 0) {
+        result[item.kind] = -count;
+      }
+    }
+
+    return result;
+  }
+
+  private toFishingItemInventory(
+    patch: FishingInventoryPatch,
+  ): FishingInventory {
+    const result = createEmptyInventory();
+
+    for (const item of fishingItems) {
+      result[item.kind] = Math.max(0, patch[item.kind] ?? 0);
+    }
+
+    return result;
   }
 
   async sellFish(userId: number, item: FishingItemMeta) {

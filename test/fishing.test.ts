@@ -116,6 +116,33 @@ describe('FishingService', () => {
       await ctx.stop();
     }
   });
+
+  test('bomb-looted catches move from angler to bomber', async () => {
+    const { ctx } = await createTestContext();
+    ctx.install(FishingPlugin);
+    await ctx.start();
+
+    try {
+      const fishing = ctx.resolve(FishingService);
+      await adjustInventoryIn(getDb(ctx), 10001, { rod: 1 });
+      await adjustInventoryIn(getDb(ctx), 10002, { rod: 1 });
+
+      const result = await fishing.applyCatchInventory(
+        10002,
+        { frog: 1 },
+        10001,
+      );
+      const bomberInventory = await fishing.getInventory(10001);
+      const anglerInventory = await fishing.getInventory(10002);
+
+      assert.equal(result.inventory.frog, 0);
+      assert.equal(result.bombLootInventory?.frog, 1);
+      assert.equal(bomberInventory.frog, 1);
+      assert.equal(anglerInventory.frog, 0);
+    } finally {
+      await ctx.stop();
+    }
+  });
 });
 
 describe('FishingPlugin', () => {
@@ -176,6 +203,42 @@ describe('FishingPlugin', () => {
       await client.receiveGroup({ groupId: 20001, userId: 10001 }, inmsg`炸鱼`);
       await flush();
       assert.match(lastText(client), /现在没有人在钓鱼/);
+    } finally {
+      await ctx.stop();
+    }
+  });
+
+  test('bomb fish settles active fishing', async () => {
+    const { ctx } = await createTestContext({ officialGroups: [20001] });
+    ctx.install(FishingPlugin);
+    await ctx.start();
+
+    try {
+      const fishing = ctx.resolve(FishingService);
+      await setBalance(ctx, 10001, {
+        shell: 100_000,
+        stamina: 100,
+        charm: 100,
+        bomb: 1,
+      });
+      await setBalance(ctx, 10002, {
+        shell: 100_000,
+        stamina: 100,
+        charm: 0,
+      });
+      await adjustInventoryIn(getDb(ctx), 10001, { rod: 1 });
+      await adjustInventoryIn(getDb(ctx), 10002, { rod: 1 });
+
+      const first = fishing.fish(10001);
+      const second = fishing.fish(10002);
+
+      const bombResult = await fishing.bombFish(10001);
+      assert.equal(bombResult.settledCount, 2);
+
+      const firstResult = await first;
+      const secondResult = await second;
+      assert.notEqual(firstResult.outcome, 'interrupted');
+      assert.notEqual(secondResult.outcome, 'interrupted');
     } finally {
       await ctx.stop();
     }

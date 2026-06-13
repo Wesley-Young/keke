@@ -64,6 +64,7 @@ export type FishingThiefEvent =
 export interface ApplyCatchInventoryResult {
   inventory: FishingInventory;
   thiefEvent?: FishingThiefEvent;
+  bombLootInventory?: FishingInventory;
 }
 
 export interface SellFishRequest {
@@ -114,6 +115,7 @@ export type FishingFishResult =
       balance: CurrencyBalance;
       inventory: FishingInventory;
       thiefEvent?: FishingThiefEvent;
+      bombLootInventory?: FishingInventory;
     }
   | {
       outcome: 'interrupted';
@@ -129,6 +131,7 @@ export type FishingWaitResolution = 'settle' | 'forfeit';
 export interface FishingWaitRecord {
   wait: Promise<FishingWaitResolution>;
   operation?: Promise<unknown>;
+  bombLootUserId?: number;
   start(waitMs: number): void;
   finish(resolution: FishingWaitResolution): void;
 }
@@ -137,7 +140,10 @@ export type FishingWaitStartedHandler = () => Promise<void> | void;
 
 export interface FishingBombResult {
   balance: CurrencyBalance;
-  interruptedCount: number;
+  settledCount: number;
+  stolenUserCount: number;
+  stolenCount: number;
+  stolenInventory: FishingInventory;
   muteSeconds: number;
   staminaCost: number;
   charmCost: number;

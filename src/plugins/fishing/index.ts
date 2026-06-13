@@ -226,7 +226,9 @@ ${thiefText}
 
         await session.reply(msg`
 ${seg.mention(message.sender_id)}
-炸鱼成功，强制让${result.interruptedCount}个人收竿
+炸鱼成功，强制结算了${result.settledCount}个人的钓鱼
+抢到了${result.stolenCount}个钓鱼产物，来自${result.stolenUserCount}个人
+收获：${result.stolenCount > 0 ? formatInventory(result.stolenInventory) : '无'}
 禁言结果：${formatDurationSeconds(result.muteSeconds)}
 ${formatCurrencyChange('炸弹', result.balance.bomb, -1)}
 ${formatCurrencyChange('体力', result.balance.stamina, -result.staminaCost)}
