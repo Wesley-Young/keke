@@ -6,8 +6,10 @@ import FishingPlugin, {
   calculateInventoryCount,
   calculateInventoryWeight,
   createEmptyInventory,
+  createThiefPool,
   type FishingFishResult,
   FishingService,
+  fishingItemKinds,
   formatFishPond,
   formatInventory,
   parseSellFishText,
@@ -68,6 +70,17 @@ describe('fishing rules', () => {
     assert.equal(calculateInventoryWeight(inventory), 14);
     assert.equal(formatInventory(inventory), '🐸🐸👑');
     assert.match(formatFishPond(), /🐸青蛙/);
+  });
+
+  test('thief pool includes every fishing item kind', () => {
+    const inventory = createEmptyInventory();
+    inventory.rod = 10;
+
+    for (const kind of fishingItemKinds) {
+      inventory[kind] = 1;
+    }
+
+    assert.deepEqual(createThiefPool(inventory), fishingItemKinds);
   });
 });
 

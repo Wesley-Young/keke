@@ -251,12 +251,12 @@ export const YARN_REWARD = 19_900;
 export const THIEF_WARNING_WEIGHT = 80;
 export const THIEF_CLEAR_WARNING_WEIGHT = 60;
 export const THIEF_STEAL_PROBABILITY = 0.3;
-export const THIEF_STEAL_MIN_PERCENT = 8;
-export const THIEF_STEAL_MAX_PERCENT = 15;
+export const THIEF_STEAL_MIN_PERCENT = 15;
+export const THIEF_STEAL_MAX_PERCENT = 20;
 export const THIEF_STEAL_MIN_WEIGHT = 10;
 export const THIEF_STEAL_MAX_WEIGHT = 80;
 export const THIEF_COOLDOWN_MS = 6 * 60 * 60 * 1000;
-export const thiefStealableItemKinds = ['diamondRing', 'crown'] as const;
+export const thiefStealableItemKinds = fishingItemKinds;
 
 export function createEmptyInventory(): FishingInventory {
   return {
