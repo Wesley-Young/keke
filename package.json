@@ -16,10 +16,11 @@
   "packageManager": "pnpm@11.5.2",
   "dependencies": {
     "@fraqjs/color-log": "^0.2.0",
-    "@fraqjs/fraq": "^0.9.1",
+    "@fraqjs/fraq": "^0.10.0",
     "@fraqjs/plugin-kysely": "^0.1.2",
     "@fraqjs/plugin-random": "^0.1.2",
     "@fraqjs/plugin-takumi": "^0.1.2",
+    "fraq-plugin-status": "^0.1.0",
     "react": "^19.2.7",
     "zod": "^4.4.3"
   },

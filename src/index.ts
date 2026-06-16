@@ -3,6 +3,7 @@ import { Context, filter } from '@fraqjs/fraq';
 import KyselyPlugin from '@fraqjs/plugin-kysely';
 import RandomPlugin from '@fraqjs/plugin-random';
 import TakumiPlugin from '@fraqjs/plugin-takumi';
+import StatusPlugin from 'fraq-plugin-status';
 
 import { type Config, rootConfig } from './config';
 import BankRobberyPlugin from './plugins/bank-robbery';
@@ -30,6 +31,12 @@ const ctx = Context.fromUrl(rootConfig.milky.url, {
 // Official plugins
 ctx.install(RandomPlugin);
 ctx.install(TakumiPlugin);
+
+// Community basic plugins
+ctx.install(StatusPlugin, {
+  commandName: '状态',
+  title: '壳壳状态',
+});
 
 function registerInstance(name: string, config: Config) {
   const keke = ctx.fork(name, filter.group(...config.enabledGroups));
